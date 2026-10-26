@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join on CourseBook</title>
+<meta name="description" content="You're invited to a course on CourseBook. Install the app and join in a few taps.">
+<style>
+  :root { --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --accent-soft: #ececfb; --line: #e4e4ee; --warn: #b45309; --warn-soft: #fef3c7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --accent-soft: #26264a; --line: #2c2c3a; --warn: #fbbf24; --warn-soft: #3a2e10; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 56px; }
+  .hero { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 24px 20px; text-align: center; }
+  .hero h1 { font-size: 1.5rem; margin: 6px 0 4px; }
+  .muted { color: var(--muted); }
+  .code { display: inline-block; font: 700 1.7rem/1 ui-monospace, "Cascadia Mono", Menlo, monospace; letter-spacing: .25em; padding: 12px 16px 12px 20px; margin: 14px 0 4px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+  .btn { display: block; width: 100%; text-align: center; text-decoration: none; font-weight: 700; font-size: 1.05rem; padding: 16px; border-radius: 14px; margin: 12px 0 0; border: 0; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.secondary { background: var(--accent-soft); color: var(--accent); }
+  h2 { font-size: 1.15rem; margin: 32px 0 6px; }
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: s; position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 14px 60px; margin: 10px 0; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 16px; top: 14px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; }
+  .say { display: inline-block; font-weight: 700; color: var(--accent); }
+  .warn { background: var(--warn-soft); color: var(--text); border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: .95rem; }
+  .warn b { color: var(--warn); }
+  .iphone { display: none; }
+  .is-ios .iphone { display: block; }
+  .is-ios .android-only { display: none; }
+  footer { margin-top: 32px; font-size: .9rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="muted">You're invited to join</div>
+    <h1 id="course">a course on CourseBook</h1>
+    <div class="muted">Your invite code</div>
+    <div class="code" id="code">--------</div>
+    <div class="android-only">
+      <a class="btn primary" id="open" href="#install">I already have CourseBook: open my invite</a>
+      <a class="btn secondary" href="#install">I don't have CourseBook yet</a>
+    </div>
+    <div class="iphone warn">CourseBook is <b>Android only</b> for now. An iPhone version is planned. Keep this code for later.</div>
+  </div>
+
+  <div class="android-only">
+    <h2 id="install">Install CourseBook (about 2 minutes)</h2>
+    <p class="muted">CourseBook isn't on the Play Store yet, so Android shows a few safety questions. They're normal. Here's what to tap.</p>
+    <ol class="steps">
+      <li>
+        <a class="btn primary" id="download" href="#" style="margin:0 0 8px">Download CourseBook</a>
+        The OneDrive page opens. Tap <span class="say">Download</span> (the ⬇ arrow at the top, or ⋯ → Download).
+        <div class="warn">If Chrome says <b>“File might be harmful”</b>, tap <span class="say">Download anyway</span>.</div>
+      </li>
+      <li>
+        When the download finishes, tap <span class="say">Open</span> at the bottom of the screen
+        (or find <b>CourseBook…apk</b> in your notifications or the <b>Files → Downloads</b> app).
+      </li>
+      <li>
+        Android may say <b>“For your security, your phone is not allowed to install unknown apps from this source.”</b>
+        Tap <span class="say">Settings</span>, switch on <span class="say">Allow from this source</span>, then tap ← back.
+        <div class="warn">This permission is only for your browser or Files app. You can switch it off again after installing.</div>
+      </li>
+      <li>
+        Tap <span class="say">Install</span>. If you already have CourseBook, tap <span class="say">Update</span>. Your notes stay.
+        <div class="warn">If <b>Google Play Protect</b> warns that the app is unknown, tap <span class="say">More details</span> → <span class="say">Install anyway</span>.
+        If it offers to <b>scan the app</b>, you can let it scan, then install.</div>
+      </li>
+      <li>
+        Tap <span class="say">Open</span>. Create your account (or sign in), and agree to the community rules.
+      </li>
+      <li>
+        Come back to this page and tap <span class="say">I already have CourseBook: open my invite</span> at the top,
+        or in the app tap <b>＋ Add → Join a course</b> and type the code <b id="code2">--------</b>.
+        <div class="warn">The course owner may need to <b>approve</b> you first. You'll see the course as soon as they do.</div>
+      </li>
+    </ol>
+
+    <h2>Something not working?</h2>
+    <ul>
+      <li><b>“App not installed”</b>: you may have an old test copy signed differently. Uninstall CourseBook and install again (back up first in Profile &amp; Settings → Backup).</li>
+      <li><b>Nothing happens when tapping Open my invite</b>: open CourseBook yourself and use <b>＋ Add → Join a course</b> with the code above.</li>
+      <li><b>Download stops</b>: the file is about 90 MB, so use Wi-Fi if you can.</li>
+    </ul>
+  </div>
+
+  <footer class="muted">
+    <a href="privacy.html">Privacy policy</a> · <a href="delete-account.html">Delete an account</a> · Contact <a href="mailto:ahmedanys@gmail.com">ahmedanys@gmail.com</a>
+  </footer>
+</main>
+<script>
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var code = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    var course = (params.get('course') || '').slice(0, 80);
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) document.documentElement.classList.add('is-ios');
+
+    if (course) {
+      document.getElementById('course').textContent = course;
+      document.title = 'Join ' + course + ' on CourseBook';
+    }
+    if (code.length === 8) {
+      document.getElementById('code').textContent = code;
+      document.getElementById('code2').textContent = code;
+      // Android: open the app on its join screen; if it isn't installed, jump to the install steps.
+      var fallback = location.href.split('#')[0] + '#install';
+      document.getElementById('open').href =
+        'intent://join/' + code + '#Intent;scheme=coursebook;package=com.coursebook.app;S.browser_fallback_url=' + encodeURIComponent(fallback) + ';end';
+    } else {
+      document.getElementById('code').textContent = 'Ask for code';
+    }
+
+    // The download link lives in config.json so it can change without new invite links.
+    fetch('config.json', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (c) { if (c && c.installUrl) document.getElementById('download').href = c.installUrl; })
+      .catch(function () {});
+  })();
+</script>
+</body>
+</html>
