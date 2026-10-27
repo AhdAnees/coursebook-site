@@ -91,6 +91,7 @@
     <a href="privacy.html">Privacy policy</a> · <a href="delete-account.html">Delete an account</a> · Contact <a href="mailto:ahmedanys@gmail.com">ahmedanys@gmail.com</a><br>© 2026 Shield Craft. All rights reserved.
   </footer>
 </main>
+<script src="supabase-config.js"></script>
 <script>
   (function () {
     var params = new URLSearchParams(location.search);
@@ -117,6 +118,17 @@
       ['code', 'open'].forEach(function (id) { document.getElementById(id).style.display = 'none'; });
       document.querySelectorAll('.hero > .muted')[1].textContent = 'Got an invite? Open the link you were sent to join your course.';
     }
+
+    // Count each tap on Download (only a count and whether it came from an invite link; nothing about the visitor).
+    document.getElementById('download').addEventListener('click', function () {
+      var sb = window.COURSEBOOK_SUPABASE;
+      if (!sb) return;
+      fetch(sb.url + '/rest/v1/rpc/count_download', {
+        method: 'POST', keepalive: true,
+        headers: { apikey: sb.anonKey, Authorization: 'Bearer ' + sb.anonKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_source: code.length === 8 ? 'join' : 'home' }),
+      }).catch(function () {});
+    });
 
     // The download link lives in config.json so it can change without new invite links.
     fetch('config.json', { cache: 'no-store' })

@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>CourseBook Analytics</title>
+<link rel="icon" href="favicon.png">
+<style>
+  :root {
+    --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --accent-ink: #ffffff;
+    --accent-soft: #ececfb; --line: #e4e4ee; --good: #1f9d63; --warn: #c27a00; --bad: #d4424a;
+    --c1: #5b5bd6; --c2: #2a9d8f; --c3: #e58f3c; --c4: #d4567d; --c5: #7b8794;
+    --shadow: 0 1px 2px rgba(40, 40, 90, .06), 0 8px 24px rgba(40, 40, 90, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --accent-ink: #121218;
+      --accent-soft: #26264a; --line: #2c2c3a; --good: #4cc38a; --warn: #f0b04a; --bad: #f07178;
+      --c1: #8f8ff0; --c2: #4fc1b3; --c3: #f0a85e; --c4: #ea7fa2; --c5: #9aa5b1; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 18px 0; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.1rem; }
+  .brand img { width: 32px; height: 32px; border-radius: 9px; }
+  .brand span { color: var(--muted); font-weight: 600; }
+  header .spacer { flex: 1; }
+  .updated { color: var(--muted); font-size: .85rem; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; background: var(--accent-soft); color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: .6; cursor: default; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+  h2 { font-size: 1rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 0 0 14px; }
+  .section-title { font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 28px 0 10px; }
+
+  /* Sign in */
+  #signin { max-width: 380px; margin: 12vh auto 0; }
+  #signin h1 { font-size: 1.4rem; margin: 0 0 6px; }
+  label { display: block; font-size: .85rem; font-weight: 700; margin: 14px 0 6px; }
+  input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  #signin button { width: 100%; margin-top: 18px; padding: 12px; }
+  .error { color: var(--bad); font-size: .9rem; margin-top: 12px; min-height: 1.2em; }
+
+  /* KPI tiles */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi .label { color: var(--muted); font-size: .82rem; font-weight: 600; }
+  .kpi .value { font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .note { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+  .kpi .note b { color: var(--good); }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(12, 1fr); }
+  .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; } .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
+  @media (max-width: 900px) { .grid > * { grid-column: span 12; } }
+  .chart { position: relative; height: 240px; }
+
+  /* Storage meter */
+  .meter { height: 10px; border-radius: 6px; background: var(--accent-soft); overflow: hidden; margin: 10px 0 6px; }
+  .meter > div { height: 100%; background: var(--accent); border-radius: 6px; min-width: 2px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .85rem; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th { text-align: left; color: var(--muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); text-transform: capitalize; }
+  .pill.ended { background: var(--line); color: var(--muted); }
+  .bar { height: 6px; border-radius: 4px; background: var(--accent); margin-top: 6px; opacity: .8; }
+  .course-name { font-weight: 700; }
+  .muted { color: var(--muted); }
+
+  /* Ranked lists */
+  .rank { list-style: none; margin: 0; padding: 0; }
+  .rank li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 7px 0; }
+  .rank .track { grid-column: 1 / -1; height: 6px; border-radius: 4px; background: var(--accent-soft); overflow: hidden; }
+  .rank .track > div { height: 100%; background: var(--c2); border-radius: 4px; }
+  .rank .n { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .empty { color: var(--muted); font-size: .9rem; padding: 12px 0; }
+  .notes { color: var(--muted); font-size: .82rem; margin: 28px 0 48px; }
+  .notes li { margin: 4px 0; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="favicon.png" alt=""> CourseBook <span>Analytics</span></div>
+    <div class="spacer"></div>
+    <div class="updated" id="updated"></div>
+    <button id="refresh" class="hidden">Refresh</button>
+    <button id="signout" class="hidden">Sign out</button>
+  </header>
+
+  <!-- Sign in -->
+  <form id="signin" class="card hidden" autocomplete="on">
+    <h1>Admin sign in</h1>
+    <p class="sub">Use your CourseBook admin account. Other accounts can't see these numbers.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit" id="signin-btn">Sign in</button>
+    <div class="error" id="signin-error" role="alert"></div>
+  </form>
+
+  <div id="loading" class="sub">Loading…</div>
+
+  <!-- Dashboard -->
+  <main id="dash" class="hidden">
+    <div class="error" id="dash-error" role="alert"></div>
+
+    <div class="section-title">Overview</div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="section-title">Growth</div>
+    <div class="grid">
+      <div class="card span-8">
+        <h2>Sign-ups and total users</h2>
+        <p class="sub">New accounts each week (bars) and all users so far (line), last 12 weeks.</p>
+        <div class="chart"><canvas id="ch-users"></canvas></div>
+      </div>
+      <div class="card span-4">
+        <h2>Downloads</h2>
+        <p class="sub">Taps on Download on the install page, per week.</p>
+        <div class="chart"><canvas id="ch-downloads"></canvas></div>
+      </div>
+      <div class="card span-12">
+        <h2>Activity</h2>
+        <p class="sub">Chat messages and new Library items each week.</p>
+        <div class="chart"><canvas id="ch-activity"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-title">Storage</div>
+    <div class="grid">
+      <div class="card span-4">
+        <h2>Total storage</h2>
+        <p class="sub" id="storage-sub"></p>
+        <div class="kpi"><div class="value" id="storage-total"></div></div>
+        <div class="meter"><div id="storage-meter"></div></div>
+        <div class="sub" id="storage-meter-label" style="margin:0 0 14px"></div>
+        <div class="chart" style="height:180px"><canvas id="ch-buckets"></canvas></div>
+        <div class="legend" id="bucket-legend" style="margin-top:12px"></div>
+      </div>
+      <div class="card span-8">
+        <h2>Storage per course</h2>
+        <p class="sub">Chat files, Library files, Memories photos and cover pictures saved in each course.</p>
+        <div class="table-wrap"><table id="courses-table">
+          <thead><tr><th>Course</th><th class="num">Members</th><th class="num">Library</th><th class="num">Photos</th><th class="num">Files</th><th class="num">Storage</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="section-title">Content</div>
+    <div class="grid">
+      <div class="card span-6">
+        <h2>Library by type</h2>
+        <p class="sub">Everything pinned to course Libraries.</p>
+        <div class="chart"><canvas id="ch-library"></canvas></div>
+      </div>
+      <div class="card span-6">
+        <h2>Notes</h2>
+        <p class="sub">Personal notebooks stay on each phone, so only shared and backed-up notes can be counted.</p>
+        <ul class="rank" id="notes-list"></ul>
+      </div>
+    </div>
+
+    <div class="section-title">Demographics</div>
+    <div class="grid">
+      <div class="card span-4">
+        <h2>Users by country</h2>
+        <p class="sub">From the country code of the phone number on each profile.</p>
+        <ul class="rank" id="countries"></ul>
+      </div>
+      <div class="card span-4">
+        <h2>Course locations</h2>
+        <p class="sub">Where courses say they take place.</p>
+        <ul class="rank" id="locations"></ul>
+      </div>
+      <div class="card span-4">
+        <h2>Course types</h2>
+        <p class="sub">What owners chose when creating the course.</p>
+        <ul class="rank" id="types"></ul>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li>Downloads are counted from 27 October 2026, when the counter was added. Earlier downloads weren't recorded, and someone tapping Download more than once counts more than once.</li>
+      <li>Installed phones are phones that opened the app and turned on notifications.</li>
+      <li>Sample courses are left out of the course numbers. Storage totals include every file, including profile pictures.</li>
+      <li>Only CourseBook admins can load this page's numbers; everyone else gets an error.</li>
+    </ul>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="supabase-config.js"></script>
+<script>
+(function () {
+  var FREE_PLAN_BYTES = 1024 * 1024 * 1024; // Supabase free plan: 1 GB of file storage
+  var BUCKET_LABEL = { chat: 'Chat & Library files', galleries: 'Memories photos', covers: 'Course covers', avatars: 'Profile pictures' };
+  var MATERIAL_LABEL = { document: 'Documents', video: 'Videos', link: 'Links', note: 'Notes', image: 'Images', audio: 'Audio' };
+  var SOURCE_LABEL = { join: 'From invite links', home: 'From the website', other: 'Other' };
+  // Same list as the app's country picker (src/lib/countries.ts): region, dialling code, name.
+  var COUNTRIES = ('MV:960:Maldives LK:94:Sri_Lanka IN:91:India BD:880:Bangladesh PK:92:Pakistan NP:977:Nepal BT:975:Bhutan ' +
+    'AF:93:Afghanistan MY:60:Malaysia SG:65:Singapore ID:62:Indonesia TH:66:Thailand PH:63:Philippines VN:84:Vietnam MM:95:Myanmar ' +
+    'KH:855:Cambodia CN:86:China HK:852:Hong_Kong TW:886:Taiwan JP:81:Japan KR:82:South_Korea AE:971:United_Arab_Emirates ' +
+    'SA:966:Saudi_Arabia QA:974:Qatar KW:965:Kuwait BH:973:Bahrain OM:968:Oman JO:962:Jordan LB:961:Lebanon IQ:964:Iraq IR:98:Iran ' +
+    'TR:90:Turkey EG:20:Egypt MA:212:Morocco DZ:213:Algeria TN:216:Tunisia LY:218:Libya SD:249:Sudan YE:967:Yemen PS:970:Palestine ' +
+    'IL:972:Israel NG:234:Nigeria GH:233:Ghana KE:254:Kenya TZ:255:Tanzania UG:256:Uganda ET:251:Ethiopia SO:252:Somalia ' +
+    'ZA:27:South_Africa MU:230:Mauritius SC:248:Seychelles GB:44:United_Kingdom IE:353:Ireland FR:33:France DE:49:Germany ' +
+    'NL:31:Netherlands BE:32:Belgium ES:34:Spain PT:351:Portugal IT:39:Italy CH:41:Switzerland AT:43:Austria SE:46:Sweden ' +
+    'NO:47:Norway DK:45:Denmark FI:358:Finland PL:48:Poland RU:7:Russia UA:380:Ukraine GR:30:Greece US:1:United_States_/_Canada ' +
+    'MX:52:Mexico BR:55:Brazil AR:54:Argentina CL:56:Chile CO:57:Colombia PE:51:Peru AU:61:Australia NZ:64:New_Zealand FJ:679:Fiji')
+    .split(' ').map(function (r) { var p = r.split(':'); return { code: p[0], dial: '+' + p[1], name: p[2].replace(/_/g, ' ') }; })
+    .sort(function (a, b) { return b.dial.length - a.dial.length; }); // longest code first, so +960 wins over +9
+
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg = window.COURSEBOOK_SUPABASE;
+  var sb = window.supabase.createClient(cfg.url, cfg.anonKey);
+  var charts = [], last = null;
+
+  function show(which) {
+    $('loading').classList.toggle('hidden', which !== 'loading');
+    $('signin').classList.toggle('hidden', which !== 'signin');
+    $('dash').classList.toggle('hidden', which !== 'dash');
+    $('refresh').classList.toggle('hidden', which !== 'dash');
+    $('signout').classList.toggle('hidden', which === 'signin' || which === 'loading');
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function fmt(n) { return Number(n || 0).toLocaleString(); }
+  function bytes(n) {
+    n = Number(n || 0);
+    if (n < 1024) return n + ' B';
+    var u = ['KB', 'MB', 'GB', 'TB'], i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+    return (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+  }
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); });
+    (children || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function weekLabel(d) { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); }
+  function countryOf(prefix) {
+    if (prefix === 'none') return 'No phone number';
+    for (var i = 0; i < COUNTRIES.length; i++) if (prefix.indexOf(COUNTRIES[i].dial) === 0) return COUNTRIES[i].name;
+    return 'Other';
+  }
+
+  function kpi(label, value, note) {
+    var n = el('div', { class: 'note' });
+    if (note) n.innerHTML = note; // our own markup with numbers only
+    return el('div', { class: 'card kpi' }, [el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }), n]);
+  }
+  function rankList(target, entries, color) {
+    var ul = $(target); ul.textContent = '';
+    if (!entries.length) { ul.appendChild(el('li', { class: 'empty', text: 'Nothing yet' })); return; }
+    var max = Math.max.apply(null, entries.map(function (e) { return e[1]; })) || 1;
+    entries.forEach(function (e) {
+      var fill = el('div'); fill.style.width = (e[1] / max * 100) + '%'; if (color) fill.style.background = color;
+      ul.appendChild(el('li', {}, [el('span', { text: e[0] }), el('span', { class: 'n', text: fmt(e[1]) }), el('div', { class: 'track' }, [fill])]));
+    });
+  }
+  function sorted(obj, label) {
+    return Object.keys(obj || {}).map(function (k) { return [label ? label(k) : k, obj[k]]; })
+      .reduce(function (acc, e) { var f = acc.find(function (a) { return a[0] === e[0]; }); if (f) f[1] += e[1]; else acc.push(e); return acc; }, [])
+      .sort(function (a, b) { return b[1] - a[1]; });
+  }
+
+  function chartDefaults() {
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = css('--muted');
+    Chart.defaults.borderColor = css('--line');
+    Chart.defaults.plugins.legend.labels.boxWidth = 10;
+    Chart.defaults.plugins.legend.labels.boxHeight = 10;
+    Chart.defaults.maintainAspectRatio = false;
+  }
+  var intAxis = { beginAtZero: true, ticks: { precision: 0 }, grid: { color: function () { return css('--line'); } } };
+
+  function render(a) {
+    last = a;
+    charts.forEach(function (c) { c.destroy(); }); charts = [];
+    chartDefaults();
+    var t = a.totals, w = a.weekly || [];
+    $('updated').textContent = 'Updated ' + new Date(a.generated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+    var k = $('kpis'); k.textContent = '';
+    [
+      kpi('Users', fmt(t.users), '<b>+' + fmt(t.signups_7d) + '</b> this week · ' + fmt(t.confirmed_users) + ' confirmed'),
+      kpi('New sign-ups', fmt(t.signups_30d), 'last 30 days · ' + fmt(t.signups_7d) + ' in 7 days'),
+      kpi('Active users', fmt(t.active_7d), 'signed in this week · ' + fmt(t.active_30d) + ' in 30 days'),
+      kpi('Downloads', fmt(t.downloads), fmt(t.downloads_7d) + ' this week'),
+      kpi('Installed phones', fmt(t.devices), fmt(t.installs) + ' users with notifications on'),
+      kpi('Courses', fmt(t.courses), fmt(t.active_courses) + ' running'),
+      kpi('Members', fmt(t.members), fmt(t.memberships) + ' course places taken'),
+      kpi('Library documents', fmt(t.library_documents), fmt(t.library_items) + ' Library items in all'),
+      kpi('Notes', fmt(Number(t.library_notes) + Number(t.backup_items)), 'shared and backed up'),
+      kpi('Storage used', bytes(t.storage_bytes), fmt(t.storage_files) + ' files'),
+    ].forEach(function (c) { k.appendChild(c); });
+
+    var labels = w.map(function (x) { return weekLabel(x.week); });
+    charts.push(new Chart($('ch-users'), {
+      data: { labels: labels, datasets: [
+        { type: 'bar', label: 'New sign-ups', data: w.map(function (x) { return x.signups; }), backgroundColor: css('--c1'), borderRadius: 6, maxBarThickness: 28, yAxisID: 'y' },
+        { type: 'line', label: 'Total users', data: w.map(function (x) { return x.users; }), borderColor: css('--c2'), backgroundColor: css('--c2'), tension: .3, pointRadius: 2, yAxisID: 'y1' },
+      ] },
+      options: { interaction: { mode: 'index', intersect: false }, scales: { x: { grid: { display: false } }, y: Object.assign({}, intAxis, { title: { display: true, text: 'New' } }), y1: { beginAtZero: true, position: 'right', ticks: { precision: 0 }, grid: { display: false }, title: { display: true, text: 'Total' } } } },
+    }));
+    charts.push(new Chart($('ch-downloads'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Downloads', data: w.map(function (x) { return x.downloads; }), backgroundColor: css('--c3'), borderRadius: 6, maxBarThickness: 28 }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: intAxis } },
+    }));
+    charts.push(new Chart($('ch-activity'), {
+      type: 'line',
+      data: { labels: labels, datasets: [
+        { label: 'Chat messages', data: w.map(function (x) { return x.messages; }), borderColor: css('--c1'), backgroundColor: css('--c1'), tension: .3, pointRadius: 2 },
+        { label: 'Library items added', data: w.map(function (x) { return x.library; }), borderColor: css('--c4'), backgroundColor: css('--c4'), tension: .3, pointRadius: 2 },
+      ] },
+      options: { interaction: { mode: 'index', intersect: false }, scales: { x: { grid: { display: false } }, y: intAxis } },
+    }));
+
+    // Storage
+    var used = Number(t.storage_bytes || 0), pct = used / FREE_PLAN_BYTES * 100;
+    $('storage-total').textContent = bytes(used);
+    $('storage-sub').textContent = fmt(t.storage_files) + ' files across all courses and profiles.';
+    $('storage-meter').style.width = Math.min(100, pct) + '%';
+    $('storage-meter').style.background = pct > 85 ? css('--bad') : pct > 60 ? css('--warn') : css('--accent');
+    $('storage-meter-label').textContent = (pct < 0.1 ? '<0.1' : pct.toFixed(1)) + '% of the 1 GB free plan';
+    var buckets = sorted(a.storage_by_bucket, function (b) { return BUCKET_LABEL[b] || b; });
+    var colors = ['--c1', '--c2', '--c3', '--c4', '--c5'].map(css);
+    charts.push(new Chart($('ch-buckets'), {
+      type: 'doughnut',
+      data: { labels: buckets.map(function (b) { return b[0]; }), datasets: [{ data: buckets.map(function (b) { return b[1]; }), backgroundColor: colors, borderColor: css('--card'), borderWidth: 2 }] },
+      options: { cutout: '68%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return ' ' + c.label + ': ' + bytes(c.raw); } } } } },
+    }));
+    var lg = $('bucket-legend'); lg.textContent = '';
+    buckets.forEach(function (b, i) { var dot = el('i'); dot.style.background = colors[i % colors.length]; lg.appendChild(el('span', {}, [dot, document.createTextNode(b[0] + ' · ' + bytes(b[1]))])); });
+
+    var tbody = $('courses-table').querySelector('tbody'); tbody.textContent = '';
+    var courses = a.courses || [];
+    var maxBytes = Math.max.apply(null, courses.map(function (c) { return Number(c.bytes); }).concat([1]));
+    if (!courses.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'No courses yet' })]));
+    courses.forEach(function (c) {
+      var bar = el('div', { class: 'bar' }); bar.style.width = Math.max(2, Number(c.bytes) / maxBytes * 100) + '%';
+      var meta = el('div', { class: 'muted', text: [c.location, 'since ' + new Date(c.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })].filter(Boolean).join(' · ') });
+      var name = el('td', {}, [
+        el('div', {}, [el('span', { class: 'course-name', text: c.title + ' ' }), el('span', { class: 'pill' + (c.ended ? ' ended' : ''), text: c.ended ? 'ended' : c.type })]),
+        meta, bar,
+      ]);
+      tbody.appendChild(el('tr', {}, [name, el('td', { class: 'num', text: fmt(c.members) }), el('td', { class: 'num', text: fmt(c.library) }),
+        el('td', { class: 'num', text: fmt(c.photos) }), el('td', { class: 'num', text: fmt(c.files) }), el('td', { class: 'num', text: bytes(c.bytes) })]));
+    });
+
+    // Content
+    var lib = sorted(a.library_by_material, function (m) { return MATERIAL_LABEL[m] || m; });
+    charts.push(new Chart($('ch-library'), {
+      type: 'bar',
+      data: { labels: lib.map(function (l) { return l[0]; }), datasets: [{ label: 'Items', data: lib.map(function (l) { return l[1]; }), backgroundColor: css('--c4'), borderRadius: 6, maxBarThickness: 28 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: intAxis, y: { grid: { display: false } } } },
+    }));
+    rankList('notes-list', [
+      ['Notes shared to Libraries', Number(t.library_notes)],
+      ['Notebook items in cloud backups', Number(t.backup_items)],
+      ['People with a cloud backup', Number(t.backups)],
+      ['Chat messages', Number(t.chat_messages)],
+      ['Memories photos', Number(t.photos)],
+    ], css('--c3'));
+
+    // Demographics
+    rankList('countries', sorted(a.phone_prefixes, countryOf), css('--c2'));
+    rankList('locations', sorted(a.course_locations), css('--c1'));
+    rankList('types', sorted(a.course_types, function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }), css('--c3'));
+  }
+
+  function load() {
+    $('refresh').disabled = true; $('dash-error').textContent = '';
+    return sb.rpc('admin_analytics').then(function (res) {
+      $('refresh').disabled = false;
+      if (res.error) {
+        if (res.error.code === '42501') { $('signin-error').textContent = 'This account is not a CourseBook admin.'; return sb.auth.signOut().then(function () { show('signin'); }); }
+        if (!$('dash').classList.contains('hidden')) { $('dash-error').textContent = 'Could not refresh: ' + res.error.message; return; }
+        $('signin-error').textContent = 'Could not load the numbers: ' + res.error.message; show('signin'); return;
+      }
+      show('dash'); render(res.data);
+    });
+  }
+
+  $('signin').addEventListener('submit', function (e) {
+    e.preventDefault();
+    $('signin-error').textContent = ''; $('signin-btn').disabled = true;
+    sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value }).then(function (res) {
+      $('signin-btn').disabled = false;
+      if (res.error) { $('signin-error').textContent = res.error.message; return; }
+      $('password').value = '';
+      show('loading'); load();
+    });
+  });
+  $('refresh').addEventListener('click', load);
+  $('signout').addEventListener('click', function () { sb.auth.signOut().then(function () { show('signin'); }); });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { if (last) render(last); });
+  // Local preview only: lets the page be checked with saved numbers without signing in.
+  if (location.hostname === '127.0.0.1') window.previewRender = function (a) { show('dash'); render(a); };
+
+  sb.auth.getSession().then(function (res) { if (res.data.session) load(); else show('signin'); });
+})();
+</script>
+</body>
+</html>
