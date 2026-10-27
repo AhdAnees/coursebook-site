@@ -4,24 +4,190 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CourseBook</title>
+<meta name="description" content="CourseBook keeps your course notes, shared Library, class chat and memories in one place, and keeps your class together after the course ends.">
+<link rel="icon" href="favicon.png">
+<meta property="og:title" content="CourseBook">
+<meta property="og:description" content="Course notes, class chat and shared memories, together in one place.">
+<meta property="og:image" content="https://ahdanees.github.io/coursebook-site/img/icon.png">
 <style>
-  :root { --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --line: #e4e4ee; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --line: #2c2c3a; } }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 640px; margin: 0 auto; padding: 48px 16px; }
-  h1 { margin: 0 0 4px; }
-  .muted { color: var(--muted); }
-  a.card { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin: 12px 0; color: var(--accent); text-decoration: none; font-weight: 600; }
+  :root {
+    --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --accent-ink: #ffffff;
+    --accent-soft: #ececfb; --line: #e4e4ee; --shadow: 0 12px 32px rgba(40, 40, 90, .12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --accent-ink: #121218; --accent-soft: #26264a; --line: #2c2c3a; --shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+  .brand img { width: 36px; height: 36px; border-radius: 9px; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: .95rem; }
+  nav a:hover { color: var(--text); }
+  @media (max-width: 640px) { nav .hide-sm { display: none; } }
+
+  .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 56px; }
+  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.1; margin: 0 0 16px; letter-spacing: -.02em; }
+  .hero p.lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-block; text-decoration: none; font-weight: 700; padding: 14px 22px; border-radius: 14px; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { background: var(--accent-soft); color: var(--accent); }
+  .small { font-size: .9rem; color: var(--muted); margin-top: 14px; }
+  .phone { width: 100%; max-width: 280px; border-radius: 30px; box-shadow: var(--shadow); border: 6px solid var(--card); display: block; background: var(--card); }
+  .hero .phones { position: relative; height: 560px; }
+  .hero .phones img { position: absolute; }
+  .hero .phones img:first-child { left: 0; top: 30px; transform: rotate(-4deg); }
+  .hero .phones img:last-child { right: 0; top: 0; transform: rotate(3deg); }
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; padding-top: 16px; }
+    .hero .phones { height: auto; display: flex; gap: 12px; justify-content: center; }
+    .hero .phones img { position: static; transform: none !important; width: 46%; max-width: 230px; }
+  }
+
+  section { padding: 56px 0; }
+  section h2 { font-size: clamp(1.6rem, 3.5vw, 2.2rem); margin: 0 0 10px; letter-spacing: -.01em; }
+  section .sub { color: var(--muted); margin: 0 0 32px; max-width: 40em; }
+
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .features { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+  .feature { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+  .feature .ico { font-size: 1.6rem; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); margin-bottom: 10px; }
+  .feature h3 { margin: 0 0 6px; font-size: 1.1rem; }
+  .feature p { margin: 0; color: var(--muted); font-size: .97rem; }
+
+  .gallery { display: flex; gap: 18px; overflow-x: auto; padding: 8px 4px 20px; scroll-snap-type: x mandatory; }
+  .gallery figure { margin: 0; flex: 0 0 230px; scroll-snap-align: start; }
+  .gallery img { width: 100%; border-radius: 24px; border: 5px solid var(--card); box-shadow: var(--shadow); display: block; }
+  .gallery figcaption { text-align: center; color: var(--muted); font-size: .92rem; margin-top: 10px; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
+  @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 20px 20px 72px; position: relative; counter-increment: s; }
+  .step::before { content: counter(s); position: absolute; left: 20px; top: 20px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; display: grid; place-items: center; }
+  .step h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  .step p { margin: 0; color: var(--muted); font-size: .97rem; }
+
+  .band { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 32px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+  @media (max-width: 760px) { .band { grid-template-columns: 1fr; padding: 24px; } }
+  .band h2 { margin: 0 0 6px; }
+  .band p { margin: 0; color: var(--muted); }
+
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; margin: 10px 0; }
+  summary { cursor: pointer; font-weight: 700; }
+  details p { color: var(--muted); margin: 8px 0 0; }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--muted); font-size: .92rem; }
+  footer a { color: var(--muted); margin-right: 16px; }
 </style>
 </head>
 <body>
-<main>
-  <h1>CourseBook</h1>
-  <p class="muted">Course notes, class chat and shared memories, together in one place.</p>
-  <a class="card" href="privacy.html">Privacy policy →</a>
-  <a class="card" href="delete-account.html">Delete your account →</a>
-  <a class="card" href="join.html">How to install CourseBook →</a>
-  <p class="muted">Contact: <a href="mailto:ahmedanys@gmail.com">ahmedanys@gmail.com</a></p>
-</main>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="img/icon.png" alt="">CourseBook</a>
+    <nav>
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#owners">For course owners</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Your whole course, in one place.</h1>
+      <p class="lead">Private notes, the course Library, class chat and shared memories, together in one app. When the course ends, your class stays connected.</p>
+      <div class="ctas">
+        <a class="btn primary" href="join.html#install">Download for Android</a>
+        <a class="btn ghost" href="#features">See what it does</a>
+      </div>
+      <p class="small">Free to join. Android now · Google Play and iPhone coming.</p>
+    </div>
+    <div class="phones">
+      <img class="phone" src="img/course.webp" alt="A course page with Notebook, Library, Memories, Chat and Members" width="270" loading="eager">
+      <img class="phone" src="img/library.webp" alt="Adding a document, Drive link, video or website to the course Library" width="270" loading="eager">
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything a course needs</h2>
+    <p class="sub">Built for training programs and classes where notes, slides and chats usually end up scattered across WhatsApp groups and drives.</p>
+    <div class="features">
+      <div class="feature"><div class="ico">📒</div><h3>Private notebook</h3><p>Subjects and topics with notes, audio, photos, video, documents, links, tasks and reminders. Only you can see it. Works offline.</p></div>
+      <div class="feature"><div class="ico">📚</div><h3>Course Library</h3><p>Slides, handouts, videos and links for everyone, sorted by subject and topic with tags. Find anything with search.</p></div>
+      <div class="feature"><div class="ico">💬</div><h3>Class chat</h3><p>Everyone, small groups and private messages. Share notes and files and @tag classmates, all inside the course.</p></div>
+      <div class="feature"><div class="ico">🖼️</div><h3>Memories</h3><p>Class photos with a built-in editor, comments and fun marks like ⭐ Star, 🎓 Proud and 🔥 Legend.</p></div>
+      <div class="feature"><div class="ico">🔔</div><h3>Notifications you control</h3><p>Sound and vibration for tags, messages and new material. Mute any chat or a whole course.</p></div>
+      <div class="feature"><div class="ico">🎓</div><h3>Stay connected after</h3><p>When a course ends it becomes your class: chat and Memories stay open so classmates keep in touch.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>A look inside</h2>
+    <p class="sub">Swipe through the app. Notes can be written in any language, including Dhivehi.</p>
+    <div class="gallery">
+      <figure><img src="img/courses.webp" alt="My courses list" loading="lazy"><figcaption>All your courses</figcaption></figure>
+      <figure><img src="img/course.webp" alt="Course page" loading="lazy"><figcaption>One page per course</figcaption></figure>
+      <figure><img src="img/notebook.webp" alt="Notebook subjects with colour bars" loading="lazy"><figcaption>Your notebook, by subject</figcaption></figure>
+      <figure><img src="img/note.webp" alt="A topic with a note in Dhivehi and a lecture video" loading="lazy"><figcaption>Notes, videos and more, in any language</figcaption></figure>
+      <figure><img src="img/library.webp" alt="Adding to the Library" loading="lazy"><figcaption>Documents, videos and links</figcaption></figure>
+      <figure><img src="img/chat.webp" alt="Course chat with Everyone and groups" loading="lazy"><figcaption>Everyone, groups, private</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="owners">
+  <div class="wrap">
+    <h2>Running a course? It takes a minute.</h2>
+    <p class="sub">Anyone can start a course, whether you're the trainer or a student organising the class.</p>
+    <div class="steps">
+      <div class="step"><h3>Create the course</h3><p>Name, dates and place. Your course gets its own invite code.</p></div>
+      <div class="step"><h3>Share one invite link</h3><p>Send it on WhatsApp or show the QR code. It helps classmates install the app and join.</p></div>
+      <div class="step"><h3>Approve and teach</h3><p>Approve who joins, put the slides in the Library, and keep the class in one chat.</p></div>
+    </div>
+    <p class="small">Safe by design: owners approve members, anyone can report misuse, and the community rules apply to everyone.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="band">
+      <div>
+        <h2>Get CourseBook</h2>
+        <p>Android phones. The install guide walks you through each step. It takes about 2 minutes.</p>
+      </div>
+      <a class="btn primary" href="join.html#install">Download for Android</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Questions</h2>
+    <details><summary>Is it free?</summary><p>Yes. Joining a course is free, and so is your notebook.</p></details>
+    <details><summary>Does it work on iPhone?</summary><p>Not yet. CourseBook is Android-only for now. An iPhone version is planned.</p></details>
+    <details><summary>Why does Android warn me when installing?</summary><p>CourseBook isn't on Google Play yet, so Android asks you to allow the install. The <a href="join.html#install">install guide</a> shows exactly what to tap. Once it's on Google Play this step goes away.</p></details>
+    <details><summary>Who can see my notes?</summary><p>Only you. Your notebook stays on your phone, with an optional private backup. What you share in a course is seen only by that course's members. See the <a href="privacy.html">privacy policy</a>.</p></details>
+    <details><summary>What if I change phones?</summary><p>Sign in on the new phone: your courses, chats and Memories are there, and your notes come back from your backup. Recordings and files can be moved with a backup file saved to your own Google Drive or OneDrive.</p></details>
+    <details><summary>How do I delete my account?</summary><p>In the app: Profile &amp; Settings → Delete my account. Or see <a href="delete-account.html">how to delete your account</a>.</p></details>
+  </div>
+</section>
+
+<div class="wrap">
+  <footer>
+    <a href="join.html#install">Install guide</a>
+    <a href="privacy.html">Privacy policy</a>
+    <a href="delete-account.html">Delete an account</a>
+    <a href="mailto:ahmedanys@gmail.com">Contact</a>
+    <div style="margin-top:12px">© 2026 Shield Craft. All rights reserved. CourseBook is made by Shield Craft.</div>
+  </footer>
+</div>
 </body>
 </html>

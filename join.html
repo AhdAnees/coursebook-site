@@ -88,7 +88,7 @@
   </div>
 
   <footer class="muted">
-    <a href="privacy.html">Privacy policy</a> · <a href="delete-account.html">Delete an account</a> · Contact <a href="mailto:ahmedanys@gmail.com">ahmedanys@gmail.com</a>
+    <a href="privacy.html">Privacy policy</a> · <a href="delete-account.html">Delete an account</a> · Contact <a href="mailto:ahmedanys@gmail.com">ahmedanys@gmail.com</a><br>© 2026 Shield Craft. All rights reserved.
   </footer>
 </main>
 <script>
@@ -110,7 +110,12 @@
       document.getElementById('open').href =
         'intent://join/' + code + '#Intent;scheme=coursebook;package=com.coursebook.app;S.browser_fallback_url=' + encodeURIComponent(fallback) + ';end';
     } else {
-      document.getElementById('code').textContent = 'Ask for code';
+      // Opened from the website (no invite): just the install guide.
+      document.title = 'Install CourseBook';
+      document.getElementById('course').textContent = 'Install CourseBook';
+      document.querySelector('.hero .muted').textContent = 'Course notes, class chat and shared memories';
+      ['code', 'open'].forEach(function (id) { document.getElementById(id).style.display = 'none'; });
+      document.querySelectorAll('.hero > .muted')[1].textContent = 'Got an invite? Open the link you were sent to join your course.';
     }
 
     // The download link lives in config.json so it can change without new invite links.
