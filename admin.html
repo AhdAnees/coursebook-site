@@ -42,7 +42,12 @@
   #signin h1 { font-size: 1.4rem; margin: 0 0 6px; }
   label { display: block; font-size: .85rem; font-weight: 700; margin: 14px 0 6px; }
   input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
-  #signin button { width: 100%; margin-top: 18px; padding: 12px; }
+  #signin button.primary { width: 100%; margin-top: 18px; padding: 12px; }
+  .pw { position: relative; }
+  .pw input { padding-right: 52px; }
+  .pw button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 44px; height: 40px; padding: 0; background: none; color: var(--muted); display: grid; place-items: center; }
+  .pw svg { width: 22px; height: 22px; }
+  .hint { color: var(--muted); font-size: .82rem; margin-top: 14px; }
   .error { color: var(--bad); font-size: .9rem; margin-top: 12px; min-height: 1.2em; }
 
   /* KPI tiles */
@@ -106,9 +111,17 @@
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" required>
     <label for="password">Password</label>
-    <input id="password" type="password" autocomplete="current-password" required>
+    <div class="pw">
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="button" id="pw-toggle" aria-label="Show password" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path id="pw-slash" d="M3 3l18 18" style="display:none"/>
+        </svg>
+      </button>
+    </div>
     <button class="primary" type="submit" id="signin-btn">Sign in</button>
     <div class="error" id="signin-error" role="alert"></div>
+    <p class="hint">Use the same email and password as in the CourseBook app. Forgot it? In the app, tap <b>Forgot password?</b> on the sign-in screen.</p>
   </form>
 
   <div id="loading" class="sub">Loading…</div>
@@ -403,10 +416,22 @@
     $('signin-error').textContent = ''; $('signin-btn').disabled = true;
     sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value }).then(function (res) {
       $('signin-btn').disabled = false;
-      if (res.error) { $('signin-error').textContent = res.error.message; return; }
+      if (res.error) {
+        $('signin-error').textContent = /invalid login credentials/i.test(res.error.message)
+          ? 'Wrong email or password. Check them (tap the eye to see the password), or reset the password in the app.'
+          : /email not confirmed/i.test(res.error.message) ? 'This email is not confirmed yet. Confirm it from the app first.' : res.error.message;
+        return;
+      }
       $('password').value = '';
       show('loading'); load();
     });
+  });
+  $('pw-toggle').addEventListener('click', function () {
+    var shown = $('password').type === 'text';
+    $('password').type = shown ? 'password' : 'text';
+    this.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+    this.setAttribute('aria-pressed', String(!shown));
+    $('pw-slash').style.display = shown ? 'none' : '';
   });
   $('refresh').addEventListener('click', load);
   $('signout').addEventListener('click', function () { sb.auth.signOut().then(function () { show('signin'); }); });
