@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Join on CourseBook</title>
-<meta name="description" content="You're invited to a course on CourseBook. Install the app and join in a few taps.">
+<title>Join on Liyaa Note</title>
+<meta name="description" content="You're invited to a course on Liyaa Note. Install the app and join in a few taps.">
 <style>
   :root { --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --accent-soft: #ececfb; --line: #e4e4ee; --warn: #b45309; --warn-soft: #fef3c7; }
   @media (prefers-color-scheme: dark) { :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --accent-soft: #26264a; --line: #2c2c3a; --warn: #fbbf24; --warn-soft: #3a2e10; } }
@@ -36,28 +36,28 @@
 <main>
   <div class="hero">
     <div class="muted">You're invited to join</div>
-    <h1 id="course">a course on CourseBook</h1>
+    <h1 id="course">a course on Liyaa Note</h1>
     <div class="muted">Your invite code</div>
     <div class="code" id="code">--------</div>
     <div class="android-only">
-      <a class="btn primary" id="open" href="#install">I already have CourseBook: open my invite</a>
-      <a class="btn secondary" href="#install">I don't have CourseBook yet</a>
+      <a class="btn primary" id="open" href="#install">I already have Liyaa Note: open my invite</a>
+      <a class="btn secondary" href="#install">I don't have Liyaa Note yet</a>
     </div>
-    <div class="iphone warn">CourseBook is <b>Android only</b> for now. An iPhone version is planned. Keep this code for later.</div>
+    <div class="iphone warn">Liyaa Note is <b>Android only</b> for now. An iPhone version is planned. Keep this code for later.</div>
   </div>
 
   <div class="android-only">
-    <h2 id="install">Install CourseBook (about 2 minutes)</h2>
-    <p class="muted">CourseBook isn't on the Play Store yet, so Android shows a few safety questions. They're normal. Here's what to tap.</p>
+    <h2 id="install">Install Liyaa Note (about 2 minutes)</h2>
+    <p class="muted">Liyaa Note isn't on the Play Store yet, so Android shows a few safety questions. They're normal. Here's what to tap.</p>
     <ol class="steps">
       <li>
-        <a class="btn primary" id="download" target="_blank" rel="noopener" href="https://ahdanees.github.io/coursebook-site/CourseBook.apk" download="CourseBook.apk" style="margin:0 0 8px">Download CourseBook</a>
+        <a class="btn primary" id="download" target="_blank" rel="noopener" href="https://ahdanees.github.io/coursebook-site/CourseBook.apk" download="Liyaa-Note.apk" style="margin:0 0 8px">Download Liyaa Note</a>
         The download starts straight away (about 87 MB, so Wi-Fi is best).
         <div class="warn">If Chrome says <b>“File might be harmful”</b>, tap <span class="say">Download anyway</span>.</div>
       </li>
       <li>
         When the download finishes, tap <span class="say">Open</span> at the bottom of the screen
-        (or find <b>CourseBook…apk</b> in your notifications or the <b>Files → Downloads</b> app).
+        (or find <b>Liyaa-Note…apk</b> in your notifications or the <b>Files → Downloads</b> app).
       </li>
       <li>
         Android may say <b>“For your security, your phone is not allowed to install unknown apps from this source.”</b>
@@ -65,7 +65,7 @@
         <div class="warn">This permission is only for your browser or Files app. You can switch it off again after installing.</div>
       </li>
       <li>
-        Tap <span class="say">Install</span>. If you already have CourseBook, tap <span class="say">Update</span>. Your notes stay.
+        Tap <span class="say">Install</span>. If you already have Liyaa Note, tap <span class="say">Update</span>. Your notes stay.
         <div class="warn">If <b>Google Play Protect</b> warns that the app is unknown, tap <span class="say">More details</span> → <span class="say">Install anyway</span>.
         If it offers to <b>scan the app</b>, you can let it scan, then install.</div>
       </li>
@@ -73,7 +73,7 @@
         Tap <span class="say">Open</span>. Create your account (or sign in), and agree to the community rules.
       </li>
       <li>
-        Come back to this page and tap <span class="say">I already have CourseBook: open my invite</span> at the top,
+        Come back to this page and tap <span class="say">I already have Liyaa Note: open my invite</span> at the top,
         or in the app tap <b>＋ Add → Join a course</b> and type the code <b id="code2">--------</b>.
         <div class="warn">The course owner may need to <b>approve</b> you first. You'll see the course as soon as they do.</div>
       </li>
@@ -81,8 +81,8 @@
 
     <h2>Something not working?</h2>
     <ul>
-      <li><b>“App not installed”</b>: you may have an old test copy signed differently. Uninstall CourseBook and install again (back up first in Profile &amp; Settings → Backup).</li>
-      <li><b>Nothing happens when tapping Open my invite</b>: open CourseBook yourself and use <b>＋ Add → Join a course</b> with the code above.</li>
+      <li><b>“App not installed”</b>: you may have an old test copy signed differently. Uninstall Liyaa Note and install again (back up first in Profile &amp; Settings → Backup).</li>
+      <li><b>Nothing happens when tapping Open my invite</b>: open Liyaa Note yourself and use <b>＋ Add → Join a course</b> with the code above.</li>
       <li><b>Download stops</b>: the file is about 90 MB, so use Wi-Fi if you can.</li>
     </ul>
   </div>
@@ -101,7 +101,7 @@
 
     if (course) {
       document.getElementById('course').textContent = course;
-      document.title = 'Join ' + course + ' on CourseBook';
+      document.title = 'Join ' + course + ' on Liyaa Note';
     }
     if (code.length === 8) {
       document.getElementById('code').textContent = code;
@@ -112,8 +112,8 @@
         'intent://join/' + code + '#Intent;scheme=coursebook;package=com.coursebook.app;S.browser_fallback_url=' + encodeURIComponent(fallback) + ';end';
     } else {
       // Opened from the website (no invite): just the install guide.
-      document.title = 'Install CourseBook';
-      document.getElementById('course').textContent = 'Install CourseBook';
+      document.title = 'Install Liyaa Note';
+      document.getElementById('course').textContent = 'Install Liyaa Note';
       document.querySelector('.hero .muted').textContent = 'Course notes, class chat and shared memories';
       ['code', 'open'].forEach(function (id) { document.getElementById(id).style.display = 'none'; });
       document.querySelectorAll('.hero > .muted')[1].textContent = 'Got an invite? Open the link you were sent to join your course.';

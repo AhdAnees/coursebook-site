@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>CourseBook Analytics</title>
+<title>Liyaa Note Analytics</title>
 <link rel="icon" href="favicon.png">
 <style>
   :root {
@@ -97,7 +97,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><img src="favicon.png" alt=""> CourseBook <span>Analytics</span></div>
+    <div class="brand"><img src="favicon.png" alt=""> Liyaa Note <span>Analytics</span></div>
     <div class="spacer"></div>
     <div class="updated" id="updated"></div>
     <button id="refresh" class="hidden">Refresh</button>
@@ -107,7 +107,7 @@
   <!-- Sign in -->
   <form id="signin" class="card hidden" autocomplete="on">
     <h1>Admin sign in</h1>
-    <p class="sub">Use your CourseBook admin account. Other accounts can't see these numbers.</p>
+    <p class="sub">Use your Liyaa Note admin account. Other accounts can't see these numbers.</p>
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" required>
     <label for="password">Password</label>
@@ -121,7 +121,7 @@
     </div>
     <button class="primary" type="submit" id="signin-btn">Sign in</button>
     <div class="error" id="signin-error" role="alert"></div>
-    <p class="hint">Use the same email and password as in the CourseBook app. Forgot it? In the app, tap <b>Forgot password?</b> on the sign-in screen.</p>
+    <p class="hint">Use the same email and password as in the Liyaa Note app. Forgot it? In the app, tap <b>Forgot password?</b> on the sign-in screen.</p>
   </form>
 
   <div id="loading" class="sub">Loading…</div>
@@ -210,7 +210,7 @@
       <li>Downloads are counted from 27 October 2026, when the counter was added. Earlier downloads weren't recorded, and someone tapping Download more than once counts more than once.</li>
       <li>Installed phones are phones that opened the app and turned on notifications.</li>
       <li>Sample courses are left out of the course numbers. Storage totals include every file, including profile pictures.</li>
-      <li>Only CourseBook admins can load this page's numbers; everyone else gets an error.</li>
+      <li>Only Liyaa Note admins can load this page's numbers; everyone else gets an error.</li>
     </ul>
   </main>
 </div>
@@ -403,7 +403,7 @@
     return sb.rpc('admin_analytics').then(function (res) {
       $('refresh').disabled = false;
       if (res.error) {
-        if (res.error.code === '42501') { $('signin-error').textContent = 'This account is not a CourseBook admin.'; return sb.auth.signOut().then(function () { show('signin'); }); }
+        if (res.error.code === '42501') { $('signin-error').textContent = 'This account is not a Liyaa Note admin.'; return sb.auth.signOut().then(function () { show('signin'); }); }
         if (!$('dash').classList.contains('hidden')) { $('dash-error').textContent = 'Could not refresh: ' + res.error.message; return; }
         $('signin-error').textContent = 'Could not load the numbers: ' + res.error.message; show('signin'); return;
       }
