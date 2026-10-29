@@ -25,6 +25,7 @@
   header.top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
   .brand img { width: 36px; height: 36px; border-radius: 9px; }
+  .beta { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 999px; }
   nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: .95rem; }
   nav a:hover { color: var(--text); }
   @media (max-width: 640px) { nav .hide-sm { display: none; } }
@@ -88,7 +89,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="./"><img src="img/icon.png" alt="">Liyaa Note</a>
+    <a class="brand" href="./"><img src="img/icon.png" alt="">Liyaa Note <span class="beta">Beta</span></a>
     <nav>
       <a class="hide-sm" href="#features">Features</a>
       <a class="hide-sm" href="#owners">For course owners</a>
@@ -104,7 +105,7 @@
         <a class="btn primary" href="join.html#install">Download for Android</a>
         <a class="btn ghost" href="#features">See what it does</a>
       </div>
-      <p class="small">Free to join. Android now · Google Play and iPhone coming.</p>
+      <p class="small">Free for students. Now in beta on Android · Google Play and iPhone coming.</p>
     </div>
     <div class="phones">
       <img class="phone" src="img/course.webp?v=2" alt="A course page with Notebook, Library, Memories, Chat and Members" width="270" loading="eager">
@@ -145,10 +146,10 @@
 
 <section id="owners">
   <div class="wrap">
-    <h2>Running a course? It takes a minute.</h2>
-    <p class="sub">Anyone can start a course, whether you're the trainer or a student organising the class.</p>
+    <h2>Running a course? We'll set it up.</h2>
+    <p class="sub">Liyaa Note is for institutions, coordinators and instructors. During the beta, the Liyaa Note team sets up each course with you. Write to <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p>
     <div class="steps">
-      <div class="step"><h3>Create the course</h3><p>Name, dates and place. Your course gets its own invite code.</p></div>
+      <div class="step"><h3>We create the course</h3><p>Name, dates and place. Your course gets its own invite code, and you manage it as the owner.</p></div>
       <div class="step"><h3>Share one invite link</h3><p>Send it on WhatsApp or show the QR code. It helps classmates install the app and join.</p></div>
       <div class="step"><h3>Approve and teach</h3><p>Approve who joins, put the slides in the Library, and keep the class in one chat.</p></div>
     </div>
@@ -171,7 +172,8 @@
 <section id="faq">
   <div class="wrap">
     <h2>Questions</h2>
-    <details><summary>Is it free?</summary><p>Yes. Joining a course is free, and so is your notebook.</p></details>
+    <details><summary>Is it free?</summary><p>For students, yes: joining a course and your notebook are free. Courses are set up for institutions and instructors; during the beta, contact <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
+    <details><summary>What does "beta" mean?</summary><p>Liyaa Note is in its test phase with its first courses. Everything works, and we're improving it from your feedback. Tell us what you think at <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
     <details><summary>Does it work on iPhone?</summary><p>Not yet. Liyaa Note is Android-only for now. An iPhone version is planned.</p></details>
     <details><summary>Why does Android warn me when installing?</summary><p>Liyaa Note isn't on Google Play yet, so Android asks you to allow the install. The <a href="join.html#install">install guide</a> shows exactly what to tap. Once it's on Google Play this step goes away.</p></details>
     <details><summary>Who can see my notes?</summary><p>Only you. Your notebook stays on your phone, with an optional private backup. What you share in a course is seen only by that course's members. See the <a href="privacy.html">privacy policy</a>.</p></details>
