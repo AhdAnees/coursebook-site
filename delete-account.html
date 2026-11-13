@@ -4,70 +4,60 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delete Your Liyaa Note Account</title>
-<link rel="icon" href="favicon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@300&family=Stack+Sans+Text:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="site.css">
+<style>
+  :root { --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --line: #e4e4ee; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --line: #2c2c3a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 28px 0 8px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin: 16px 0; }
+  a { color: var(--accent); }
+</style>
 </head>
 <body>
-<header class="doc-top">
-  <div class="top wrap">
-    <span></span>
-    <a class="mark" href="./"><img src="img/icon.png" alt="" width="28" height="28">Liyaa Note</a>
-    <a class="toplink" href="./#faq">Questions</a>
-  </div>
-</header>
-
 <main>
-  <div class="doc-head red">
-    <div class="wrap">
-      <div><h1>Delete your Liyaa Note account</h1>
-      <p>Two ways to do it: in the app straight away, or by email if you no longer have the app.</p></div>
-      <div class="aside"><p>In the app: Profile &amp; Settings, then Account, then Delete my account.</p><a href="mailto:support@liyaanote.app?subject=Delete%20my%20Liyaa%20Note%20account">Or email support@liyaanote.app</a></div>
-    </div>
+  <h1>Delete your Liyaa Note account</h1>
+  <p class="muted">Liyaa Note, by the Liyaa Note developer</p>
+
+  <h2>Option 1: in the app (instant)</h2>
+  <div class="card">
+    <ol>
+      <li>Open Liyaa Note and, on <strong>My courses</strong>, tap the person icon at the top to open <strong>Profile &amp; Settings</strong>.</li>
+      <li>Scroll to <strong>Account</strong> and tap <strong>Delete my account</strong>.</li>
+      <li>Type <strong>DELETE</strong> and confirm.</li>
+    </ol>
   </div>
 
-  <div class="doc">
-    <div class="wrap layout"><nav class="side toc" aria-label="On this page"><a href="#in-the-app-straight-away">In the app, straight away</a><a href="#by-email">By email</a><a href="#what-is-deleted">What is deleted</a><a href="#courses-you-own">Courses you own</a><a href="#what-we-keep">What we keep</a></nav><div class="col">
-      <h2 id="in-the-app-straight-away">In the app, straight away</h2>
-      <ol>
-        <li>Open Liyaa Note and, on <strong>My courses</strong>, tap the person icon at the top to open <strong>Profile &amp; Settings</strong>.</li>
-        <li>Scroll to <strong>Account</strong> and tap <strong>Delete my account</strong>.</li>
-        <li>Type <strong>DELETE</strong> and confirm.</li>
-      </ol>
-
-      <h2 id="by-email">By email</h2>
-      <p>If you no longer have the app, email <a href="mailto:support@liyaanote.app?subject=Delete%20my%20Liyaa%20Note%20account">support@liyaanote.app</a>
-      <strong>from the email address you use for Liyaa Note</strong>, with the subject “Delete my Liyaa Note account”.
-      We delete the account within 30 days and reply to confirm.</p>
-
-      <h2 id="what-is-deleted">What is deleted</h2>
-      <ul>
-        <li>Your account, email and password</li>
-        <li>Your profile: names, phone number, photo, headline, About and links</li>
-        <li>Your chat messages, shared files, Memories photos, comments and marks, and Library items you added</li>
-        <li>Your notes backup, notification settings, mutes and phone notification tokens</li>
-        <li>Join requests and reports you sent</li>
-        <li>When deleted in the app: the notebook stored on that phone</li>
-      </ul>
-
-      <h2 id="courses-you-own">Courses you own</h2>
-      <p>Ownership passes to the member who has been in the course longest, so your classmates keep the course, its Library and
-      Memories (except your own posts, which are deleted). A course with nobody else in it is deleted.</p>
-
-      <h2 id="what-we-keep">What we keep</h2>
-      <p>If the account was suspended for breaking the community rules, we keep its email address so the same person cannot
-      sign up again. Nothing else is kept. See also the <a href="privacy.html">privacy policy</a>.</p>
-    </div></div>
+  <h2>Option 2: ask us by email</h2>
+  <div class="card">
+    <p>If you no longer have the app, email <a href="mailto:support@liyaanote.app?subject=Delete%20my%20Liyaa%20Note%20account">support@liyaanote.app</a>
+    <strong>from the email address you use for Liyaa Note</strong>, with the subject “Delete my Liyaa Note account”.
+    We delete the account within 30 days and reply to confirm.</p>
   </div>
+
+  <h2>What is deleted</h2>
+  <ul>
+    <li>Your account, email and password</li>
+    <li>Your profile: names, phone number, photo, headline, About and links</li>
+    <li>Your chat messages, shared files, Memories photos, comments and marks, and Library items you added</li>
+    <li>Your notes backup, notification settings, mutes and phone notification tokens</li>
+    <li>Join requests and reports you sent</li>
+    <li>When deleted in the app: the notebook stored on that phone</li>
+  </ul>
+
+  <h2>What happens to courses you own</h2>
+  <p>Ownership passes to the member who has been in the course longest, so your classmates keep the course, its Library and
+  Memories (except your own posts, which are deleted). A course with nobody else in it is deleted.</p>
+
+  <h2>What we keep</h2>
+  <p>If the account was suspended for breaking the community rules, we keep its email address so the same person cannot
+  sign up again. Nothing else is kept.</p>
+
+  <p class="muted">See also our <a href="privacy.html">privacy policy</a>.</p>
+  <p class="muted">© 2026 Liyaa Note. All rights reserved.</p>
 </main>
-
-<footer class="doc-foot">
-  <div class="wrap">
-    <div class="links"><a href="./">Liyaa Note</a><a href="join.html#install">Install guide</a><a href="privacy.html">Privacy policy</a><a href="mailto:support@liyaanote.app">support@liyaanote.app</a></div>
-    <p>© 2026 Shield Craft. All rights reserved.</p>
-  </div>
-</footer>
 </body>
 </html>
