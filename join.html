@@ -54,8 +54,9 @@
     <div class="android-only">
       <a class="btn primary" id="open" href="#install">I already have Liyaa Note: open my invite</a>
       <a class="btn secondary" href="#install">I don't have Liyaa Note yet</a>
+      <p class="muted" style="text-align:center;margin:12px 0 0">Or <a id="web-join-2" href="app/">use Liyaa Note in your browser</a></p>
     </div>
-    <div class="iphone warn">Liyaa Note is on <b>Android</b> for now. An iPhone version is on its way through Apple's TestFlight. Keep this code for later.</div>
+    <div class="iphone warn">Liyaa Note is on <b>Android</b> for now. An iPhone version is on its way through Apple's TestFlight. Until then, <a id="web-join" href="app/">join the course in your browser</a>.</div>
   </div>
 
   <div class="android-only">
@@ -133,6 +134,8 @@
     if (code.length === 8) {
       document.getElementById('code').textContent = code;
       document.getElementById('code2').textContent = code;
+      // The browser version opens on the join form with this code filled in.
+      ['web-join', 'web-join-2'].forEach(function (id) { document.getElementById(id).href = 'app/#/join/' + code; });
       // Android: open the app on its join screen; if it isn't installed, jump to the install steps.
       var fallback = location.href.split('#')[0] + '#install';
       document.getElementById('open').href =

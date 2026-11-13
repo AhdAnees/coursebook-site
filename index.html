@@ -28,6 +28,8 @@
   .beta { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 999px; }
   nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: .95rem; }
   nav a:hover { color: var(--text); }
+  nav a.signin { color: var(--accent-ink); background: var(--accent); font-weight: 700; padding: 8px 16px; border-radius: 10px; }
+  nav a.signin:hover { color: var(--accent-ink); opacity: .9; }
   @media (max-width: 640px) { nav .hide-sm { display: none; } }
 
   .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 56px; }
@@ -146,6 +148,7 @@
       <a class="hide-sm" href="#features">Features</a>
       <a class="hide-sm" href="#owners">For course owners</a>
       <a href="#faq">FAQ</a>
+      <a class="signin" href="app/">Sign in</a>
     </nav>
   </header>
 
