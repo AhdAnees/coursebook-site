@@ -9,187 +9,430 @@
 <meta property="og:title" content="Liyaa Note">
 <meta property="og:description" content="Course notes, class chat and shared memories, together in one place.">
 <meta property="og:image" content="https://liyaanote.app/img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@300&family=Stack+Sans+Text:wght@400;500&family=Noto+Sans+Thaana:wght@300;400;500&family=Noto+Sans+Arabic:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+<script>document.documentElement.classList.add('js')</script>
 <style>
-  :root {
-    --bg: #f7f7fb; --card: #ffffff; --text: #1c1c28; --muted: #5d5d72; --accent: #5b5bd6; --accent-ink: #ffffff;
-    --accent-soft: #ececfb; --line: #e4e4ee; --shadow: 0 12px 32px rgba(40, 40, 90, .12);
+  /* ---------- Hero: a stack of course folders ---------- */
+  .hero { position: relative; height: 100svh; min-height: 640px; overflow: hidden; background: var(--bg); color: var(--ink); }
+  .hero .top { position: relative; z-index: 2; }
+  .hero-text { position: relative; z-index: 2; text-align: center; padding-top: clamp(40px, 7svh, 88px); }
+  .hero h1 { font: 300 clamp(72px, 10vw, 160px)/1 var(--display); letter-spacing: -0.035em; margin: 0; }
+  .hero .lede { font-size: var(--step-lead); line-height: 1.4; max-width: 46ch; margin: 28px auto 0; text-wrap: balance; }
+  .folders { position: absolute; left: 0; right: 0; top: 51%; bottom: 0; }
+  .folder { position: absolute; left: 7%; width: 86%; height: 100%; display: block; color: inherit; text-decoration: none; }
+  .folder .tab { position: absolute; top: -40px; height: 41px; padding: 0 34px; display: flex; align-items: center; font: 500 17px/1 var(--text); white-space: nowrap;
+    background: inherit; clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 100%, 0 100%); }
+  .folder:nth-child(1) { top: 0;     background: var(--field-5); color: var(--field-5-ink); }
+  .folder:nth-child(2) { top: 56px;  background: var(--field-4); color: var(--field-4-ink); }
+  .folder:nth-child(3) { top: 112px; background: var(--field-1); color: var(--field-1-ink); }
+  .folder:nth-child(4) { top: 168px; background: var(--field-2); color: var(--field-2-ink); }
+  .folder:nth-child(5) { top: 224px; background: var(--field-3); color: var(--field-3-ink); }
+  .folder:nth-child(1) .tab { right: 4%; }
+  .folder:nth-child(2) .tab { left: 52%; }
+  .folder:nth-child(3) .tab { left: 30%; }
+  .folder:nth-child(4) .tab { left: 10%; }
+  .folder:nth-child(5) .tab { left: 0; }
+  a.folder { transition: transform 260ms var(--ease-out); }
+  a.folder:hover, a.folder:focus-visible { transform: translateY(-10px); }
+  .front { padding: 28px 32px; display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: 12px 28px; }
+  .front p { margin: 0; max-width: 40ch; align-self: center; }
+  @media (max-width: 760px) {
+    .folders { top: 50%; }
+    .folder { left: 0; width: 100%; }
+    .folder .tab { height: 33px; top: -32px; padding: 0 22px; font-size: 15px; }
+    .folder:nth-child(2) { top: 52px; } .folder:nth-child(3) { top: 104px; } .folder:nth-child(4) { top: 156px; } .folder:nth-child(5) { top: 208px; }
+    .folder:nth-child(1) .tab { right: 16px; } .folder:nth-child(2) .tab { left: auto; right: 16px; }
+    .folder:nth-child(3) .tab { left: 50%; transform: translateX(-50%); } .folder:nth-child(4) .tab { left: 16px; } .folder:nth-child(5) .tab { left: 0; }
+    .front { padding: 20px var(--margin); }
+    .front .btn { width: 100%; }
+    .front p { font-size: 15px; }
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #121218; --card: #1c1c26; --text: #ececf3; --muted: #a3a3b8; --accent: #8f8ff0; --accent-ink: #121218; --accent-soft: #26264a; --line: #2c2c3a; --shadow: 0 12px 32px rgba(0, 0, 0, .45); }
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  a { color: var(--accent); }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
-  header.top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
-  .brand img { width: 36px; height: 36px; border-radius: 9px; }
-  .beta { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 999px; }
-  nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: .95rem; }
-  nav a:hover { color: var(--text); }
-  @media (max-width: 640px) { nav .hide-sm { display: none; } }
+  .js .folder { animation: folder-in 900ms var(--ease-out) both; animation-delay: calc(var(--i) * 90ms + 200ms); }
+  @keyframes folder-in { from { transform: translateY(70vh); } to { transform: none; } }
 
-  .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 56px; }
-  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.1; margin: 0 0 16px; letter-spacing: -.02em; }
-  .hero p.lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
-  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
-  .btn { display: inline-block; text-decoration: none; font-weight: 700; padding: 14px 22px; border-radius: 14px; }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); }
-  .btn.ghost { background: var(--accent-soft); color: var(--accent); }
-  .small { font-size: .9rem; color: var(--muted); margin-top: 14px; }
-  .phone { width: 100%; max-width: 280px; border-radius: 30px; box-shadow: var(--shadow); border: 6px solid var(--card); display: block; background: var(--card); }
-  .hero .phones { position: relative; height: 560px; }
-  .hero .phones img { position: absolute; }
-  .hero .phones img:first-child { left: 0; top: 30px; transform: rotate(-4deg); }
-  .hero .phones img:last-child { right: 0; top: 0; transform: rotate(3deg); }
-  @media (max-width: 860px) {
-    .hero { grid-template-columns: 1fr; padding-top: 16px; }
-    .hero .phones { height: auto; display: flex; gap: 12px; justify-content: center; }
-    .hero .phones img { position: static; transform: none !important; width: 46%; max-width: 230px; }
+  /* ---------- Inside a course: four cards dealt into a fan ---------- */
+  .inside { background: var(--field-2); color: var(--field-2-ink); }
+  .fan-wrap { height: 250svh; position: relative; }
+  .fan-stage { position: sticky; top: 0; height: 100svh; min-height: 680px; overflow: hidden; }
+  .fan-head { position: absolute; top: 72px; left: var(--margin); right: var(--margin); display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 var(--gutter); }
+  .fan-head h2 { grid-column: 1 / 7; }
+  .fan-head p { grid-column: 8 / 13; margin: 0; align-self: end; max-width: 44ch; }
+  .fan { position: absolute; left: 50%; bottom: 7svh; width: 1090px; height: 440px; margin-left: -545px; }
+  .card { position: absolute; top: 0; width: 340px; height: 440px; padding: 28px; border-radius: var(--radius); display: flex; flex-direction: column; justify-content: space-between;
+    will-change: transform; }
+  .card:nth-child(1) { left: 0;     background: var(--field-1); color: var(--field-1-ink); --r: -3deg; }
+  .card:nth-child(2) { left: 250px; background: var(--paper);   color: var(--paper-ink);   --r: 2deg; }
+  .card:nth-child(3) { left: 500px; background: var(--field-3); color: var(--field-3-ink); --r: -2deg; }
+  .card:nth-child(4) { left: 750px; background: var(--field-4); color: var(--field-4-ink); --r: 3deg; }
+  .card h3 { font: 300 32px/1.05 var(--display); letter-spacing: -0.02em; margin: 0; max-width: 222px; }
+  .card img { width: 204px; height: 220px; object-fit: cover; object-position: top; border-radius: 10px; display: block; }
+  .card p { margin: 0; font-size: 17px; line-height: 1.45; max-width: 222px; }
+  @media (max-width: 1180px), (max-height: 700px) {
+    .fan-wrap { height: auto; }
+    .fan-stage { position: static; height: auto; min-height: 0; overflow: visible; padding: 120px 0 140px; }
+    .fan-head { position: static; padding: 0 var(--margin); }
+    .fan { position: static; margin: 56px 0 0; width: auto; height: auto; display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
+      padding: 8px var(--margin) 12px; scroll-padding: 0 var(--margin); }
+    .card { position: relative; left: auto !important; flex: 0 0 min(340px, 82vw); transform: none !important; scroll-snap-align: start; }
+  }
+  @media (max-width: 760px) {
+    .fan-head { display: block; }
+    .fan-head p { margin-top: 20px; }
   }
 
-  section { padding: 56px 0; }
-  section h2 { font-size: clamp(1.6rem, 3.5vw, 2.2rem); margin: 0 0 10px; letter-spacing: -.01em; }
-  section .sub { color: var(--muted); margin: 0 0 32px; max-width: 40em; }
+  /* ---------- Write: the headline you can type ---------- */
+  .write { background: var(--field-1); color: var(--field-1-ink); min-height: 92svh; padding: 140px 0 120px; }
+  .write .wrap > p.intro { max-width: 52ch; margin: 24px 0 0; }
+  .typed { display: block; width: 100%; margin: 64px 0 0; padding: 0; border: 0; background: none; color: inherit; outline: none; caret-color: var(--field-1-ink);
+    font: 300 clamp(44px, 8vw, 132px)/1.1 var(--display), "Noto Sans Thaana", "Noto Sans Arabic", sans-serif; letter-spacing: -0.03em; }
+  .typed[dir="rtl"] { letter-spacing: 0; font-family: "Noto Sans Thaana", "Noto Sans Arabic", var(--display), sans-serif; }
+  .typed::placeholder { color: inherit; opacity: .55; }
+  .typed:focus-visible { background: rgba(255, 255, 255, .08); outline: none; }
+  .answer { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 32px var(--gutter); align-items: end; margin-top: 48px; }
+  .note-ui { background: #ffffff; color: #1c1c28; border-radius: 16px; padding: 18px 20px 22px; font-family: var(--text); }
+  .note-ui .crumb { font-size: 14px; color: #5d5d72; display: flex; justify-content: space-between; gap: 12px; }
+  .note-ui .crumb b { color: #1c1c28; font-weight: 500; }
+  .note-ui .body { font-size: 18px; line-height: 1.5; margin-top: 12px; min-height: 1.5em; overflow-wrap: anywhere; }
+  .note-ui .body[dir="rtl"] { font-family: "Noto Sans Thaana", "Noto Sans Arabic", var(--text); text-align: right; font-size: 20px; }
+  .note-ui .dir { margin-top: 14px; font-size: 14px; color: #00663f; font-weight: 500; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+  .examples span { width: 100%; font-size: 15px; opacity: .85; }
+  .examples button { font: 500 17px/1.3 var(--text); color: inherit; background: none; border: 0; padding: 6px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
+  .examples button:hover, .examples button:focus-visible { text-decoration-thickness: 3px; }
+  .examples button[lang="dv"] { font-family: "Noto Sans Thaana", var(--text); font-size: 19px; }
+  .examples button[lang="ar"] { font-family: "Noto Sans Arabic", var(--text); }
+  @media (max-width: 1100px) { .write { min-height: 0; } }
+  @media (max-width: 760px) {
+    .write { padding: 96px 0; min-height: 0; }
+    .typed { font-size: 11vw; margin-top: 40px; }
+    .answer { grid-template-columns: 1fr; margin-top: 28px; }
+    .examples { gap: 8px; }
+    .examples button { background: rgba(255, 255, 255, .2); padding: 0 14px; min-height: 44px; text-decoration: none; border-radius: var(--radius-s); }
+  }
 
-  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  @media (max-width: 860px) { .features { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
-  .feature { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
-  .feature .ico { font-size: 1.6rem; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); margin-bottom: 10px; }
-  .feature h3 { margin: 0 0 6px; font-size: 1.1rem; }
-  .feature p { margin: 0; color: var(--muted); font-size: .97rem; }
+  /* ---------- Organisers: accordion of tinted panels ---------- */
+  .organisers { background: var(--paper); color: var(--paper-ink); padding: 160px 0; }
+  .org-intro { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 var(--gutter); }
+  .org-intro h2 { grid-column: 1 / 6; }
+  .org-intro p { grid-column: 7 / 12; margin: 0; font-size: var(--step-body); }
+  .stages { display: flex; height: 540px; margin-top: 64px; border-radius: var(--radius); overflow: hidden; }
+  .stage { position: relative; flex: 1 1 0; min-width: 0; transition: flex-grow 450ms var(--ease-out); overflow: hidden; }
+  .stage.open { flex-grow: 7.2; }
+  .stage:nth-child(1) { background: #00663f; color: #fff; }
+  .stage:nth-child(2) { background: #007a52; color: #fff; }
+  .stage:nth-child(3) { background: #5fb38a; color: #0e1a14; }
+  .stage:nth-child(4) { background: #9fd1b7; color: #0e1a14; }
+  .stage:nth-child(5) { background: #d3ecdf; color: #0e1a14; }
+  .stage button { position: absolute; inset: 0; width: 100%; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+  .stage button span { position: absolute; left: 22px; bottom: 26px; font: 500 20px/1 var(--text); white-space: nowrap; transform-origin: left bottom; transform: rotate(-90deg) translateY(100%); }
+  .stage button:hover span, .stage button:focus-visible span { text-decoration: underline; text-underline-offset: 5px; }
+  .stage.open button { display: none; }
+  .stage .panel { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); opacity: 0; visibility: hidden; transition: opacity 300ms var(--ease-out) 0ms; }
+  .stage.open .panel { opacity: 1; visibility: visible; transition-delay: 220ms; }
+  .panel .words { padding: 36px; display: flex; flex-direction: column; justify-content: space-between; min-width: 300px; }
+  .panel h3 { font: 300 40px/1.05 var(--display); letter-spacing: -0.02em; margin: 0; }
+  .panel p { margin: 0; max-width: 36ch; font-size: 17px; }
+  .panel figure { margin: 0; overflow: hidden; }
+  .panel figure img { width: 100%; height: 100%; object-fit: cover; display: block; animation: drift 24s var(--ease-soft) infinite alternate; }
+  .panel .shot { padding: 36px 36px 0; display: flex; justify-content: center; align-items: flex-end; }
+  .panel .shot img { width: min(260px, 100%); height: 100%; max-height: 468px; object-fit: cover; object-position: top; border-radius: 14px 14px 0 0; display: block; }
+  @keyframes drift { from { transform: scale(1.02); } to { transform: scale(1.12) translateX(-2%); } }
+  @media (max-width: 900px) {
+    .organisers { padding: 120px 0; }
+    .org-intro { display: block; }
+    .org-intro p { margin-top: 20px; }
+    .stages { flex-direction: column; height: auto; margin-top: 40px; }
+    .stage { flex: none; }
+    .stage button { position: relative; inset: auto; height: 64px; }
+    .stage button span { transform: none; left: 20px; bottom: auto; top: 22px; font-size: 18px; }
+    .stage.open button { display: none; }
+    .stage .panel { position: static; display: none; grid-template-columns: 1fr; }
+    .stage.open .panel { display: grid; }
+    .panel .words { min-width: 0; padding: 24px 20px; gap: 20px; }
+    .panel p { font-size: 17px; }
+    .panel figure { height: 220px; }
+    .panel .shot { padding: 0 20px; height: 300px; }
+  }
 
-  .gallery { display: flex; gap: 18px; overflow-x: auto; padding: 8px 4px 20px; scroll-snap-type: x mandatory; }
-  .gallery figure { margin: 0; flex: 0 0 230px; scroll-snap-align: start; }
-  .gallery img { width: 100%; border-radius: 24px; border: 5px solid var(--card); box-shadow: var(--shadow); display: block; }
-  .gallery figcaption { text-align: center; color: var(--muted); font-size: .92rem; margin-top: 10px; }
+  /* ---------- Install: one word is the button ---------- */
+  .install { display: flex; flex-direction: column; justify-content: space-between; min-height: 62svh; padding: 32px var(--margin) 24px; background: var(--accent); color: var(--accent-ink);
+    text-decoration: none; transition: background 0ms, color 0ms; }
+  .install:hover, .install:focus-visible { background: var(--accent-ink); color: var(--accent); outline: none; }
+  .install .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .install .row p { margin: 0; font-size: 20px; max-width: 34ch; }
+  .install svg { width: 48px; height: 48px; flex: none; transition: transform 260ms var(--ease-out); }
+  .install:hover svg, .install:focus-visible svg { transform: translate(6px, -6px); }
+  .install .word { display: block; font: 300 38.5vw/0.78 var(--display); letter-spacing: -0.05em; margin: 40px 0 0 -0.04em; white-space: nowrap; }
+  @media (max-width: 760px) {
+    .install { min-height: 46svh; }
+    .install .row p { font-size: 17px; }
+    .install svg { width: 32px; height: 32px; }
+    .install .word { font-size: 38vw; }
+  }
 
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
-  @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
-  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 20px 20px 72px; position: relative; counter-increment: s; }
-  .step::before { content: counter(s); position: absolute; left: 20px; top: 20px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; display: grid; place-items: center; }
-  .step h3 { margin: 0 0 4px; font-size: 1.05rem; }
-  .step p { margin: 0; color: var(--muted); font-size: .97rem; }
-
-  .band { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 32px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
-  @media (max-width: 760px) { .band { grid-template-columns: 1fr; padding: 24px; } }
-  .band h2 { margin: 0 0 6px; }
-  .band p { margin: 0; color: var(--muted); }
-
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; margin: 10px 0; }
-  summary { cursor: pointer; font-weight: 700; }
-  details p { color: var(--muted); margin: 8px 0 0; }
-
-  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--muted); font-size: .92rem; }
-  footer a { color: var(--muted); margin-right: 16px; }
+  /* ---------- Questions: accordion of filled tiles ---------- */
+  .faq { background: var(--bg); color: var(--ink); padding: 160px 0 40px; }
+  .faq .wrap { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 var(--gutter); align-items: start; }
+  .faq h2 { grid-column: 1 / 5; position: sticky; top: 96px; }
+  .tiles { grid-column: 5 / 13; display: grid; gap: 8px; }
+  .tiles details { background: var(--surface); border-radius: var(--radius); transition: background 200ms var(--ease-out); }
+  .tiles summary { list-style: none; cursor: pointer; min-height: 72px; padding: 22px 64px 22px 24px; position: relative; font: 500 20px/1.35 var(--text); }
+  .tiles summary::-webkit-details-marker { display: none; }
+  .tiles summary::before, .tiles summary::after { content: ""; position: absolute; right: 24px; top: 34px; width: 16px; height: 3px; background: currentColor; transition: transform 240ms var(--ease-out); }
+  .tiles summary::after { transform: rotate(90deg); }
+  .tiles details[open] { background: var(--accent); color: var(--accent-ink); }
+  .tiles details[open] summary::after { transform: rotate(0deg); }
+  .tiles summary:hover { background: rgba(0, 0, 0, .04); border-radius: var(--radius); }
+  .tiles details p { margin: 0; padding: 0 24px 26px; max-width: 52ch; font-size: 17px; }
+  .tiles details a { color: inherit; }
+  @media (max-width: 900px) {
+    .faq { padding: 120px 0; }
+    .faq .wrap { display: block; }
+    .faq h2 { position: static; margin-bottom: 32px; }
+    .tiles { gap: 6px; }
+    .tiles summary { font-size: 18px; min-height: 64px; padding: 20px 56px 20px 20px; }
+    .tiles summary::before, .tiles summary::after { right: 20px; top: 31px; }
+    .tiles details p { font-size: 16px; padding: 0 20px 22px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <a class="brand" href="./"><img src="img/icon.png" alt="">Liyaa Note <span class="beta">Beta</span></a>
-    <nav>
-      <a class="hide-sm" href="#features">Features</a>
-      <a class="hide-sm" href="#owners">For course owners</a>
-      <a href="#faq">FAQ</a>
-    </nav>
-  </header>
 
-  <div class="hero">
-    <div>
-      <h1>Your whole course, in one place.</h1>
-      <p class="lead">Private notes, the course Library, class chat and shared memories, together in one app. When the course ends, your class stays connected.</p>
-      <div class="ctas">
-        <a class="btn primary" href="join.html#install">Download for Android</a>
-        <a class="btn ghost" href="#features">See what it does</a>
+<header class="hero" data-ink="#141414">
+  <div class="top wrap">
+    <span></span>
+    <a class="mark" href="./"><img src="img/icon.png" alt="" width="28" height="28">Liyaa Note</a>
+    <a class="toplink" href="#faq">Questions</a>
+  </div>
+  <div class="hero-text wrap">
+    <h1>Liyaa Note</h1>
+    <p class="lede">One app for your training course: private notes, the class Library, chat and photos. Free for students, in beta on Android.</p>
+  </div>
+  <nav class="folders" aria-label="Sections">
+    <a class="folder" href="#faq" style="--i:0"><span class="tab">Questions</span></a>
+    <a class="folder" href="#organisers" style="--i:1"><span class="tab">For course owners</span></a>
+    <a class="folder" href="#write" style="--i:2"><span class="tab">Write in Dhivehi</span></a>
+    <a class="folder" href="#inside" style="--i:3"><span class="tab">Inside a course</span></a>
+    <div class="folder front" style="--i:4">
+      <span class="tab">Get the app</span>
+      <a class="btn on-accent" href="join.html#install">Download for Android</a>
+      <p>About 2 minutes with the install guide. iPhone is planned.</p>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <section class="inside" id="inside" data-ink="#141414" aria-labelledby="inside-h">
+    <div class="fan-wrap">
+      <div class="fan-stage">
+        <div class="fan-head">
+          <h2 id="inside-h" data-reveal>Inside a course</h2>
+          <p data-reveal style="--d:1">Every course you join has the same four parts. Your notebook is yours alone. The rest is shared with your class, and nobody outside it.</p>
+        </div>
+        <div class="fan" id="fan">
+          <article class="card">
+            <h3>Notebook</h3>
+            <img src="img/notebook.webp?v=2" alt="The notebook screen with two subjects, Ethics and Standards and Assessment Notes" width="204" height="220" loading="lazy">
+            <p>Notes, photos, recordings, files and reminders, sorted by subject and topic. Private, and it works offline.</p>
+          </article>
+          <article class="card">
+            <h3>Library</h3>
+            <img src="img/library.webp?v=2" alt="The course Library with a menu to add a document, a Drive link, a video or a website" width="204" height="220" loading="lazy">
+            <p>Slides, handouts, videos and links for the whole class, by subject and topic, with search.</p>
+          </article>
+          <article class="card">
+            <h3>Chat</h3>
+            <img src="img/chat.webp?v=2" alt="Course chat with the Everyone room and smaller groups" width="204" height="220" loading="lazy">
+            <p>Everyone, small groups and private messages. Share a note or a file and @tag a classmate.</p>
+          </article>
+          <article class="card">
+            <h3>Memories</h3>
+            <img src="img/course.webp?v=2" alt="The course page with Notebook, Library, Memories, Chat and Members" width="204" height="220" loading="lazy">
+            <p>Class photos with comments and marks like Star, Proud and Legend. They stay after the course ends.</p>
+          </article>
+        </div>
       </div>
-      <p class="small">Free for students. Now in beta on Android · Google Play and iPhone coming.</p>
     </div>
-    <div class="phones">
-      <img class="phone" src="img/course.webp?v=2" alt="A course page with Notebook, Library, Memories, Chat and Members" width="270" loading="eager">
-      <img class="phone" src="img/library.webp?v=2" alt="Adding a document, Drive link, video or website to the course Library" width="270" loading="eager">
-    </div>
-  </div>
-</div>
+  </section>
 
-<section id="features">
-  <div class="wrap">
-    <h2>Everything a course needs</h2>
-    <p class="sub">Built for training programs and classes where notes, slides and chats usually end up scattered across WhatsApp groups and drives.</p>
-    <div class="features">
-      <div class="feature"><div class="ico">📒</div><h3>Organize your notes</h3><p>Add your notes—including audio, photos, video, documents, links, tasks and reminders—to the relevant subjects and topics. 100% private and works offline.</p></div>
-      <div class="feature"><div class="ico">📚</div><h3>Course Library</h3><p>Slides, handouts, videos and links for everyone, sorted by subject and topic with tags. Find anything with search.</p></div>
-      <div class="feature"><div class="ico">💬</div><h3>Class chat</h3><p>Everyone, small groups and private messages. Share notes and files and @tag classmates, all inside the course.</p></div>
-      <div class="feature"><div class="ico">🖼️</div><h3>Memories</h3><p>Class photos with a built-in editor, comments and fun marks like ⭐ Star, 🎓 Proud and 🔥 Legend.</p></div>
-      <div class="feature"><div class="ico">🔔</div><h3>Notifications you control</h3><p>Sound and vibration for tags, messages and new material. Mute any chat or a whole course.</p></div>
-      <div class="feature"><div class="ico">🎓</div><h3>Stay connected after</h3><p>When a course ends it becomes your class: chat and Memories stay open so classmates keep in touch.</p></div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>A look inside</h2>
-    <p class="sub">Swipe through the app. Notes can be written in any language, including Dhivehi.</p>
-    <div class="gallery">
-      <figure><img src="img/courses.webp?v=2" alt="My courses list" loading="lazy"><figcaption>All your courses</figcaption></figure>
-      <figure><img src="img/course.webp?v=2" alt="Course page" loading="lazy"><figcaption>One page per course</figcaption></figure>
-      <figure><img src="img/notebook.webp?v=2" alt="Notebook subjects with colour bars" loading="lazy"><figcaption>Your notebook, by subject</figcaption></figure>
-      <figure><img src="img/note.webp?v=2" alt="A topic with a note and a lecture video" loading="lazy"><figcaption>Notes, videos and more, in any language</figcaption></figure>
-      <figure><img src="img/library.webp?v=2" alt="Adding to the Library" loading="lazy"><figcaption>Documents, videos and links</figcaption></figure>
-      <figure><img src="img/chat.webp?v=2" alt="Course chat with Everyone and groups" loading="lazy"><figcaption>Everyone, groups, private</figcaption></figure>
-    </div>
-  </div>
-</section>
-
-<section id="owners">
-  <div class="wrap">
-    <h2>Running a course? We'll set it up.</h2>
-    <p class="sub">Liyaa Note is for institutions, coordinators and instructors. During the beta, the Liyaa Note team sets up each course with you. Write to <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p>
-    <div class="steps">
-      <div class="step"><h3>We create the course</h3><p>Name, dates and place. Your course gets its own invite code, and you manage it as the owner.</p></div>
-      <div class="step"><h3>Share one invite link</h3><p>Send it on WhatsApp or show the QR code. It helps classmates install the app and join.</p></div>
-      <div class="step"><h3>Approve and teach</h3><p>Approve who joins, put the slides in the Library, and keep the class in one chat.</p></div>
-    </div>
-    <p class="small">Safe by design: owners approve members, anyone can report misuse, and the community rules apply to everyone.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="band">
-      <div>
-        <h2>Get Liyaa Note</h2>
-        <p>Android phones. The install guide walks you through each step. It takes about 2 minutes.</p>
+  <section class="write" id="write" data-ink="#141414" aria-labelledby="write-h">
+    <div class="wrap">
+      <h2 id="write-h" data-reveal>Write in Dhivehi or English</h2>
+      <p class="intro" data-reveal style="--d:1">Type a line below and see it the way the app sets it. Thaana and Arabic turn right to left on their own; bold, italic and underline work in every language.</p>
+      <div data-ui>
+        <label for="typed" class="sr-only">Type a line of a note</label>
+        <input class="typed" id="typed" type="text" value="Tourniquet: 1 minute max" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Type a line…">
+        <div class="answer">
+          <div class="note-ui" aria-live="polite">
+            <div class="crumb"><span>Best Practices › <b>Collection</b></span><span>Note</span></div>
+            <div class="body" id="note-body"></div>
+            <div class="dir" id="note-dir"></div>
+          </div>
+          <div class="examples">
+            <span>Try one:</span>
+            <button type="button" data-text="Release the tourniquet within **1 minute**">English, with bold</button>
+            <button type="button" lang="dv" data-text="ލިޔާ ނޯޓަށް މަރުޙަބާ">ލިޔާ ނޯޓަށް މަރުޙަބާ</button>
+            <button type="button" lang="ar" data-text="مرحبا بكم في الدورة">مرحبا بكم في الدورة</button>
+          </div>
+        </div>
       </div>
-      <a class="btn primary" href="join.html#install">Download for Android</a>
+    </div>
+  </section>
+
+  <section class="organisers" id="organisers" data-ink="#111111" aria-labelledby="org-h">
+    <div class="wrap">
+      <div class="org-intro">
+        <h2 id="org-h" data-reveal>Running a course?</h2>
+        <p data-reveal style="--d:1">Liyaa Note is for institutions, coordinators and instructors. During the beta, we set up every course with you. Write to <a href="mailto:support@liyaanote.app?subject=A%20course%20on%20Liyaa%20Note">support@liyaanote.app</a> with the course name, dates and place.</p>
+      </div>
+      <div class="stages" data-reveal style="--d:2">
+        <div class="stage open">
+          <button type="button" aria-expanded="true"><span>We set it up</span></button>
+          <div class="panel">
+            <div class="words"><h3>We set up the course</h3><p>The Liyaa Note team creates it with you: name, dates and place. You become the owner, and the course gets its own invite code.</p></div>
+            <figure><img src="assets/male-total.jpg" alt="Malé seen from the air, with the airport island behind it" width="1920" height="1280" loading="lazy"></figure>
+          </div>
+        </div>
+        <div class="stage">
+          <button type="button" aria-expanded="false"><span>Share one link</span></button>
+          <div class="panel">
+            <div class="words"><h3>Share one link</h3><p>Send the invite on WhatsApp or show its QR code. The link walks each person through installing the app and joining.</p></div>
+            <div class="shot"><img src="img/courses.webp?v=2" alt="The list of courses a member has joined" width="260" height="468" loading="lazy"></div>
+          </div>
+        </div>
+        <div class="stage">
+          <button type="button" aria-expanded="false"><span>Approve members</span></button>
+          <div class="panel">
+            <div class="words"><h3>Approve who joins</h3><p>Only people you approve get in. Anyone can report misuse, and the community rules apply to everyone.</p></div>
+            <div class="shot"><img src="img/course.webp?v=2" alt="The course page an owner manages" width="260" height="468" loading="lazy"></div>
+          </div>
+        </div>
+        <div class="stage">
+          <button type="button" aria-expanded="false"><span>Teach from the Library</span></button>
+          <div class="panel">
+            <div class="words"><h3>Teach from the Library</h3><p>Put the slides, handouts and video links in the Library. Members get a notification when new material arrives.</p></div>
+            <div class="shot"><img src="img/note.webp?v=2" alt="A topic with a note and a lecture video" width="260" height="468" loading="lazy"></div>
+          </div>
+        </div>
+        <div class="stage">
+          <button type="button" aria-expanded="false"><span>The class stays</span></button>
+          <div class="panel">
+            <div class="words"><h3>The class stays together</h3><p>When the course ends, its chat and Memories stay open, so the class can keep in touch.</p></div>
+            <div class="shot"><img src="img/chat.webp?v=2" alt="The class chat" width="260" height="468" loading="lazy"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <a class="install" id="get" href="join.html#install" aria-labelledby="get-h">
+    <span class="row">
+      <p id="get-h">Get Liyaa Note for Android. The install guide shows every tap and takes about 2 minutes.</p>
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 34 L34 14 M17 14 H34 V31" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </span>
+    <span class="word" aria-hidden="true">Install</span>
+  </a>
+
+  <section class="faq" id="faq" data-ink="#141414" aria-labelledby="faq-h">
+    <div class="wrap">
+      <h2 id="faq-h" data-reveal>Questions</h2>
+      <div class="tiles" data-reveal style="--d:1">
+        <details name="faq"><summary>Is it free?</summary><p>For students, yes: joining a course and your notebook are free. Courses are set up for institutions and instructors; during the beta, contact <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
+        <details name="faq"><summary>What does “beta” mean?</summary><p>Liyaa Note is in its test phase with its first courses. Everything works, and we’re improving it from your feedback. Tell us what you think at <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
+        <details name="faq"><summary>Does it work on iPhone?</summary><p>Not yet. Liyaa Note is Android-only for now. An iPhone version is planned.</p></details>
+        <details name="faq"><summary>Why does Android warn me when installing?</summary><p>Liyaa Note isn’t on Google Play yet, so Android asks you to allow the install. The <a href="join.html#install">install guide</a> shows exactly what to tap. Once it’s on Google Play this step goes away.</p></details>
+        <details name="faq"><summary>Who can see my notes?</summary><p>Only you. Your notebook stays on your phone, with an optional private backup. What you share in a course is seen only by that course’s members. See the <a href="privacy.html">privacy policy</a>.</p></details>
+        <details name="faq"><summary>What if I change phones?</summary><p>Sign in on the new phone: your courses, chats and Memories are there, and your notes come back from your backup. Recordings and files can be moved with a backup file saved to your own Google Drive or OneDrive.</p></details>
+        <details name="faq"><summary>How do I delete my account?</summary><p>In the app: Profile &amp; Settings, then Delete my account. Or see <a href="delete-account.html">how to delete your account</a>.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" data-ink="#141414">
+  <div class="wrap">
+    <div class="blocks" aria-label="Liyaa Note" role="img">
+      <span style="--h:92%">L</span><span style="--h:70%">i</span><span style="--h:100%">y</span><span style="--h:78%">a</span><span style="--h:88%">a</span>
+      <span class="gap"></span>
+      <span style="--h:96%">N</span><span style="--h:74%">o</span><span style="--h:84%">t</span><span style="--h:66%">e</span>
+    </div>
+    <div class="foot-cols">
+      <div><h2 class="foot-h">The app</h2><a href="join.html#install">Install guide</a><a href="#inside">Inside a course</a><a href="#faq">Questions</a></div>
+      <div><h2 class="foot-h">Your account</h2><a href="privacy.html">Privacy policy</a><a href="delete-account.html">Delete an account</a></div>
+      <div class="contact"><h2 class="foot-h">Contact</h2><a href="mailto:support@liyaanote.app">support@liyaanote.app</a><p>Courses are set up by the Liyaa Note team during the beta.</p></div>
+    </div>
+    <div class="foot-last">
+      <p>© 2026 Shield Craft. All rights reserved. Photo of Malé: <a href="https://commons.wikimedia.org/wiki/File:Male-total.jpg">Shahee Ilyas</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>.</p>
+      <a class="btn small" href="join.html#install">Download</a>
     </div>
   </div>
-</section>
+</footer>
 
-<section id="faq">
-  <div class="wrap">
-    <h2>Questions</h2>
-    <details><summary>Is it free?</summary><p>For students, yes: joining a course and your notebook are free. Courses are set up for institutions and instructors; during the beta, contact <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
-    <details><summary>What does "beta" mean?</summary><p>Liyaa Note is in its test phase with its first courses. Everything works, and we're improving it from your feedback. Tell us what you think at <a href="mailto:support@liyaanote.app">support@liyaanote.app</a>.</p></details>
-    <details><summary>Does it work on iPhone?</summary><p>Not yet. Liyaa Note is Android-only for now. An iPhone version is planned.</p></details>
-    <details><summary>Why does Android warn me when installing?</summary><p>Liyaa Note isn't on Google Play yet, so Android asks you to allow the install. The <a href="join.html#install">install guide</a> shows exactly what to tap. Once it's on Google Play this step goes away.</p></details>
-    <details><summary>Who can see my notes?</summary><p>Only you. Your notebook stays on your phone, with an optional private backup. What you share in a course is seen only by that course's members. See the <a href="privacy.html">privacy policy</a>.</p></details>
-    <details><summary>What if I change phones?</summary><p>Sign in on the new phone: your courses, chats and Memories are there, and your notes come back from your backup. Recordings and files can be moved with a backup file saved to your own Google Drive or OneDrive.</p></details>
-    <details><summary>How do I delete my account?</summary><p>In the app: Profile &amp; Settings → Delete my account. Or see <a href="delete-account.html">how to delete your account</a>.</p></details>
-  </div>
-</section>
+<script>
+// Reveal once on entering the viewport; never leaves content hidden.
+(() => {
+  const t = document.querySelectorAll('[data-reveal]');
+  if (!('IntersectionObserver' in window)) { t.forEach((el) => el.classList.add('is-in')); return; }
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -10% 0px', threshold: 0.08 });
+  t.forEach((el) => io.observe(el));
+  addEventListener('load', () => setTimeout(() => t.forEach((el) => { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add('is-in'); }), 2500));
+})();
 
-<div class="wrap">
-  <footer>
-    <a href="join.html#install">Install guide</a>
-    <a href="privacy.html">Privacy policy</a>
-    <a href="delete-account.html">Delete an account</a>
-    <a href="mailto:support@liyaanote.app">Contact</a>
-    <div style="margin-top:12px">© 2026 Shield Craft. All rights reserved.</div>
-  </footer>
-</div>
+// Inside a course: the cards are dealt one by one as the pinned stage scrolls.
+(() => {
+  const wrap = document.querySelector('.fan-wrap'), cards = [...document.querySelectorAll('.card')];
+  const still = matchMedia('(prefers-reduced-motion: reduce)'), small = matchMedia('(max-width: 1180px), (max-height: 700px)');
+  function frame() {
+    if (still.matches || small.matches) { cards.forEach((c) => (c.style.transform = '')); return; }
+    const r = wrap.getBoundingClientRect(), span = r.height - innerHeight;
+    const p = Math.min(1, Math.max(0, -r.top / (span * 0.85)));
+    cards.forEach((c, i) => {
+      // Card one is on the table from the start; each later card lands in its own quarter of the hold.
+      const k = i === 0 ? 1 : Math.min(1, Math.max(0, (p - (i - 1) / 3) * 3));
+      const e = 1 - Math.pow(1 - k, 3);
+      c.style.transform = `translateY(${(1 - e) * 110}vh) rotate(calc(var(--r) * ${e}))`;
+      c.style.opacity = i === 0 ? 1 : Math.min(1, k * 4);
+    });
+  }
+  let queued = false;
+  addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; frame(); }); } }, { passive: true });
+  addEventListener('resize', frame);
+  frame();
+})();
+
+// Write: the note line, set the way the app sets it (same marks, same right-to-left detection).
+(() => {
+  const input = document.getElementById('typed'), body = document.getElementById('note-body'), dir = document.getElementById('note-dir');
+  const RTL = /[֐-ࣿיִ-ﻼ]/;
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const marks = (s) => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\+\+([^+]+)\+\+/g, '<u>$1</u>')
+    .replace(/(^|[^\w])_([^_\s][^_]*)_/g, '$1<i>$2</i>');
+  function show() {
+    const v = input.value, rtl = RTL.test(v);
+    input.dir = rtl ? 'rtl' : 'ltr';
+    body.dir = rtl ? 'rtl' : 'ltr';
+    body.innerHTML = v.trim() ? marks(v) : '…'; // everything typed is escaped first
+    dir.textContent = !v.trim() ? '' : rtl ? 'Right to left, set automatically' : 'Left to right';
+  }
+  input.addEventListener('input', show);
+  document.querySelectorAll('.examples button').forEach((b) => b.addEventListener('click', () => { input.value = b.dataset.text; show(); input.focus(); }));
+  show();
+})();
+
+// Running a course: one stage open at a time.
+(() => {
+  const stages = [...document.querySelectorAll('.stage')];
+  stages.forEach((s) => s.querySelector('button').addEventListener('click', () => {
+    stages.forEach((o) => { o.classList.toggle('open', o === s); o.querySelector('button').setAttribute('aria-expanded', String(o === s)); });
+    s.querySelector('h3').setAttribute('tabindex', '-1');
+    s.querySelector('h3').focus({ preventScroll: true });
+  }));
+})();
+</script>
 </body>
 </html>
