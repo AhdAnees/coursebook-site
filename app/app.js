@@ -91,7 +91,7 @@
       h('a', { class: 'brand', href: '#/' }, h('img', { src: '../img/icon.png', alt: '' }), 'Liyaa Note'),
       h('span', { class: 'grow' }),
       h('span', { class: 'who' }, name),
-      h('button', { class: 'btn plain small', type: 'button', onclick: async function () { stopChannel(); await sb.auth.signOut(); location.hash = '#/'; } }, 'Sign out'));
+      h('button', { class: 'btn plain small', type: 'button', onclick: async function () { stopChannel(); forgetNotesKey(); await sb.auth.signOut(); location.hash = '#/'; } }, 'Sign out'));
   }
 
   // ---------- Signing in ----------
@@ -307,6 +307,7 @@
       h('div', { class: 'course-head' }, h('h1', null, c.title),
         h('p', null, [c.location, fmtDate(c.start_date) + (c.end_date ? ' – ' + fmtDate(c.end_date) : ''), ctx.names.size + ' members'].filter(Boolean).join(' · '))),
       h('nav', { class: 'tabs', 'aria-label': 'Course' },
+        h('a', { href: '#/c/' + c.id + '/notebook', 'aria-current': tab === 'notebook' ? 'page' : null }, 'Notebook'),
         h('a', { href: '#/c/' + c.id + '/library', 'aria-current': tab === 'library' ? 'page' : null }, 'Library'),
         h('a', { href: '#/c/' + c.id + '/chat', 'aria-current': tab === 'chat' ? 'page' : null }, 'Chat')),
       h('div', { class: 'tab-body' }, body)];
@@ -563,6 +564,212 @@
     });
   }
 
+  // ---------- Notebook (end-to-end encrypted notes sync) ----------
+  // Same format as the phone app (src/lib/notesCrypto.ts): AES-256-GCM, "v1.<iv>.<ciphertext+tag>", the notebook key
+  // wrapped with PBKDF2-SHA256 from the notes password. The unlocked key lives only in this tab's session storage.
+
+  var KEY_AAD = 'liyaa-notes-key', ITER = 210000, enc = new TextEncoder(), dec = new TextDecoder();
+  var SUBJECT_COLORS = ['#4F6DF5', '#E5484D', '#30A46C', '#F76B15', '#8E4EC6', '#0091FF', '#D6409F', '#12A594'];
+  var notesKey = null; // CryptoKey for AES-GCM
+  var NK_STORE = 'liyaa.notesKey';
+
+  function b64(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s); }
+  function unb64(s) { var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+  function forgetNotesKey() { notesKey = null; try { sessionStorage.removeItem(NK_STORE); } catch (e) { /* storage unavailable */ } }
+  async function kekFrom(password, salt, iterations) {
+    var base = await crypto.subtle.importKey('raw', enc.encode(password.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function seal(key, plain, aad) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(aad) }, key, plain);
+    return 'v1.' + b64(iv) + '.' + b64(ct);
+  }
+  async function unseal(key, sealed, aad) {
+    var p = String(sealed).split('.');
+    if (p[0] !== 'v1' || !p[1] || !p[2]) throw new Error('Unknown encrypted format.');
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(p[1]), additionalData: enc.encode(aad) }, key, unb64(p[2])));
+  }
+  async function useRawKey(raw) {
+    notesKey = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    try { sessionStorage.setItem(NK_STORE, state.user.id + ':' + b64(raw)); } catch (e) { /* storage unavailable */ }
+  }
+  async function restoreNotesKey() {
+    if (notesKey) return true;
+    try {
+      var s = sessionStorage.getItem(NK_STORE) || '', i = s.indexOf(':');
+      if (i > 0 && s.slice(0, i) === state.user.id) { await useRawKey(unb64(s.slice(i + 1))); return true; }
+    } catch (e) { /* storage unavailable */ }
+    return false;
+  }
+  async function wrappedKeyRow() {
+    var r = await sb.from('notes_keys').select('salt, iterations, wrapped_key').eq('user_id', state.user.id).maybeSingle(); fail(r.error);
+    return r.data;
+  }
+  async function unlockNotes(password) {
+    var w = await wrappedKeyRow(); if (!w) throw new Error('Notes sync isn’t set up yet.');
+    var kek = await kekFrom(password, unb64(w.salt), w.iterations), raw;
+    try { raw = await unseal(kek, w.wrapped_key, KEY_AAD); } catch (e) { throw new Error('That notes password isn’t right.'); }
+    await useRawKey(raw);
+  }
+  async function setUpNotes(password) {
+    if (await wrappedKeyRow()) throw new Error('Notes sync is already set up. Enter your notes password instead.');
+    var raw = crypto.getRandomValues(new Uint8Array(32)), salt = crypto.getRandomValues(new Uint8Array(16));
+    var wrapped = await seal(await kekFrom(password, salt, ITER), raw, KEY_AAD);
+    var r = await sb.from('notes_keys').insert({ user_id: state.user.id, salt: b64(salt), iterations: ITER, wrapped_key: wrapped }); fail(r.error);
+    await useRawKey(raw);
+  }
+  async function encryptItem(id, kind, data) { return seal(notesKey, enc.encode(JSON.stringify(data)), id + ':' + kind); }
+  async function decryptItem(id, kind, sealed) { return JSON.parse(dec.decode(await unseal(notesKey, sealed, id + ':' + kind))); }
+  async function saveItem(courseId, id, kind, data) {
+    var at = new Date().toISOString(); data.updatedAt = at;
+    var r = await sb.from('notes_sync').upsert({ id: id, user_id: state.user.id, course_id: courseId, kind: kind, payload: await encryptItem(id, kind, data), deleted: false, client_updated_at: at }, { onConflict: 'id' });
+    fail(r.error);
+  }
+  async function deleteItem(id, kind) {
+    var r = await sb.from('notes_sync').upsert({ id: id, user_id: state.user.id, kind: kind, payload: null, deleted: true, client_updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    fail(r.error);
+  }
+
+  /** The course's notebook from the server: subjects → topics → notes, decrypted. */
+  async function loadNotebook(courseId) {
+    var r = await sb.from('notes_sync').select('id, kind, payload').eq('course_id', courseId).eq('deleted', false).limit(5000); fail(r.error);
+    var subjects = [], topics = [], notes = [], unreadable = 0;
+    for (var i = 0; i < (r.data || []).length; i++) {
+      var row = r.data[i];
+      try {
+        var d = await decryptItem(row.id, row.kind, row.payload); d.id = row.id;
+        (row.kind === 'subject' ? subjects : row.kind === 'topic' ? topics : notes).push(d);
+      } catch (e) { unreadable++; }
+    }
+    var bySubject = function (a, b) { return (a.orderIndex || 0) - (b.orderIndex || 0) || String(a.title).localeCompare(String(b.title)); };
+    subjects.sort(bySubject); topics.sort(bySubject);
+    notes.sort(function (a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)); });
+    var subjectIds = new Set(subjects.map(function (s) { return s.id; }));
+    topics = topics.filter(function (t) { return subjectIds.has(t.subjectId); });
+    return { subjects: subjects, topics: topics, notes: notes, unreadable: unreadable };
+  }
+
+  function noteTitle(n) { var first = String(n.content || '').split('\n').map(function (l) { return l.replace(/^[#>\-*\s]+|\*\*|__|\+\+|\{[^}]*\}/g, '').trim(); }).filter(Boolean)[0]; return first ? first.slice(0, 80) : 'Empty note'; }
+
+  async function viewNotebook(ctx, topicId) {
+    var panel = h('section', { class: 'panel' }, h('p', { class: 'empty' }, 'Opening your notebook…'));
+    show.apply(null, courseFrame(ctx, 'notebook', panel));
+    try {
+      if (!(await restoreNotesKey())) {
+        var w = await wrappedKeyRow();
+        return panel.replaceChildren(notesGate(ctx, !!w));
+      }
+      var nb = await loadNotebook(ctx.course.id);
+      panel.replaceChildren(notebookBody(ctx, nb, topicId));
+    } catch (x) { panel.replaceChildren(h('p', { class: 'empty error' }, x.message)); }
+  }
+
+  /** Unlock (or first-time setup) form. */
+  function notesGate(ctx, isSetUp) {
+    var pw = h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Notes password' });
+    var pw2 = isSetUp ? null : h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Type it again' });
+    var err = errorBox();
+    var btn = h('button', { class: 'btn', type: 'submit' }, isSetUp ? 'Unlock' : 'Turn on notes');
+    var form = h('form', { onsubmit: async function (e) {
+      e.preventDefault(); setError(err, null);
+      if (!isSetUp && pw.value.length < 8) return setError(err, new Error('Use at least 8 characters.'));
+      if (!isSetUp && pw.value !== pw2.value) return setError(err, new Error('The two passwords don’t match.'));
+      busy(btn, true, [btn.textContent, 'Unlocking…']);
+      try { isSetUp ? await unlockNotes(pw.value) : await setUpNotes(pw.value); viewNotebook(ctx); }
+      catch (x) { setError(err, x); btn.disabled = false; btn.textContent = isSetUp ? 'Unlock' : 'Turn on notes'; }
+    } },
+      h('label', { class: 'field' }, h('span', null, isSetUp ? 'Notes password' : 'Choose a notes password (8 or more characters)'), pw),
+      pw2 ? h('label', { class: 'field' }, h('span', null, 'Type it again'), pw2) : null,
+      btn, err);
+    return h('div', { class: 'gate' },
+      h('h2', null, isSetUp ? 'Unlock your notebook' : 'Your notebook on the web'),
+      h('p', { class: 'sub' }, isSetUp
+        ? 'Your notes are locked with your notes password, so only you can read them. It’s the one you chose in the phone app (Profile & Settings → Notes on the web).'
+        : 'Turn it on in the phone app (Profile & Settings → Notes on the web) to bring your phone’s notes here. No phone app? Choose a notes password to start writing notes here.'),
+      isSetUp ? null : h('p', { class: 'note-line' }, 'If you forget the notes password, your synced notes can’t be recovered. Nobody, not even Liyaa Note, can open them.'),
+      form);
+  }
+
+  function notebookBody(ctx, nb, topicId) {
+    var courseId = ctx.course.id;
+    var topic = nb.topics.filter(function (t) { return t.id === topicId; })[0] || null;
+    function go(id) { location.hash = '#/c/' + courseId + '/notebook' + (id ? '/' + id : ''); }
+
+    var side = h('nav', { class: 'nb-side', 'aria-label': 'Subjects and topics' },
+      nb.subjects.length ? nb.subjects.map(function (s) {
+        var ts = nb.topics.filter(function (t) { return t.subjectId === s.id; });
+        return h('div', { class: 'nb-subject' },
+          h('div', { class: 'nb-sh' }, h('span', { class: 'dot', style: 'background:' + (/^#[0-9a-f]{3,8}$/i.test(s.color || '') ? s.color : '#4F6DF5') }), h('b', null, s.title),
+            h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Add a topic to ' + s.title, onclick: function () { addTopic(s, ts.length); } }, '＋')),
+          ts.map(function (t) {
+            var count = nb.notes.filter(function (n) { return n.topicId === t.id; }).length;
+            return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, String(count)));
+          }));
+      }) : h('p', { class: 'note-line', style: 'padding:8px' }, 'No subjects yet.'),
+      h('button', { class: 'btn soft small', type: 'button', style: 'margin:8px', onclick: addSubject }, '＋ New subject'),
+      h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'));
+
+    var main = h('div', { class: 'nb-main' });
+    if (!topic) {
+      main.appendChild(h('div', { class: 'pick' }, nb.subjects.length ? 'Pick a topic to see its notes.' : 'Start with a subject (like a module or day), then add topics and notes.'));
+    } else {
+      var list = nb.notes.filter(function (n) { return n.topicId === topic.id; });
+      main.append(
+        h('div', { class: 'nb-head' }, h('a', { class: 'back', href: '#/c/' + courseId + '/notebook', 'aria-label': 'All topics' }, '←'), h('h2', null, topic.title),
+          h('button', { class: 'btn small', type: 'button', onclick: function () { editNote(null); } }, '＋ New note')),
+        list.length ? h('div', { class: 'nb-notes' }, list.map(function (n) {
+          return h('button', { class: 'nb-note', type: 'button', onclick: function () { editNote(n); } },
+            h('b', null, noteTitle(n)), h('span', { class: 'm' }, String(n.content || '').slice(0, 220)), h('span', { class: 'm small' }, 'Edited ' + fmtDate(n.updatedAt)));
+        })) : h('p', { class: 'empty' }, 'No notes in this topic yet.'));
+    }
+    if (nb.unreadable) main.appendChild(h('p', { class: 'note-line', style: 'padding:0 16px 16px' }, nb.unreadable + ' item(s) couldn’t be unlocked with this key.'));
+
+    async function addSubject() {
+      var title = (prompt('Name of the new subject (e.g. Day 1 or Module 2):') || '').trim(); if (!title) return;
+      try {
+        var id = uuid(), now = new Date().toISOString();
+        await saveItem(courseId, id, 'subject', { courseId: courseId, title: title.slice(0, 80), color: SUBJECT_COLORS[nb.subjects.length % SUBJECT_COLORS.length], orderIndex: nb.subjects.length, createdAt: now, updatedAt: now });
+        viewNotebook(ctx, topicId);
+      } catch (x) { toast(x.message); }
+    }
+    async function addTopic(s, n) {
+      var title = (prompt('Name of the new topic in ' + s.title + ':') || '').trim(); if (!title) return;
+      try {
+        var id = uuid(), now = new Date().toISOString();
+        await saveItem(courseId, id, 'topic', { subjectId: s.id, title: title.slice(0, 80), keywords: [], orderIndex: n, createdAt: now, updatedAt: now });
+        go(id);
+      } catch (x) { toast(x.message); }
+    }
+    function editNote(n) {
+      var area = h('textarea', { class: 'nb-editor', 'aria-label': 'Note text', maxlength: '30000', placeholder: 'Write your note…' });
+      area.value = n ? n.content || '' : '';
+      var err = errorBox();
+      var save = h('button', { class: 'btn', type: 'button', onclick: async function () {
+        if (!area.value.trim()) return setError(err, new Error('Write something first.'));
+        save.disabled = true;
+        try {
+          var now = new Date().toISOString();
+          await saveItem(courseId, n ? n.id : uuid(), 'note', { topicId: topic.id, content: area.value, createdAt: n ? n.createdAt : now, updatedAt: now });
+          d.close(); viewNotebook(ctx, topic.id);
+        } catch (x) { setError(err, x); save.disabled = false; }
+      } }, 'Save');
+      var del = n ? h('button', { class: 'btn plain', type: 'button', style: 'color:var(--danger)', onclick: async function () {
+        if (!confirm('Delete this note? It will also disappear from your phone.')) return;
+        try { await deleteItem(n.id, 'note'); d.close(); viewNotebook(ctx, topic.id); } catch (x) { setError(err, x); }
+      } }, 'Delete') : null;
+      var d = h('dialog', { 'aria-label': n ? 'Edit note' : 'New note' },
+        h('div', { class: 'dh' }, h('span', null, (n ? 'Edit note' : 'New note') + ' · ' + topic.title), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
+        h('div', { class: 'db', style: 'white-space:normal' }, area, err,
+          h('div', { class: 'nb-actions' }, del, h('span', { class: 'grow' }), save),
+          h('p', { class: 'note-line' }, 'Locked with your notes password before it leaves this browser. It appears on your phone at its next sync.')));
+      d.addEventListener('close', function () { d.remove(); });
+      document.body.appendChild(d); d.showModal(); area.focus();
+    }
+
+    return h('div', { class: 'nb' + (topic ? ' open' : '') }, side, main);
+  }
+
   // ---------- Routing ----------
 
   var courseCache = { id: null, ctx: null };
@@ -583,6 +790,7 @@
         if (courseCache.id !== parts[1]) { courseCache = { id: parts[1], ctx: await loadCourse(parts[1]) }; }
       } catch (x) { courseCache = { id: null, ctx: null }; return show(topBar('#/'), h('main', { class: 'page' }, h('div', { class: 'card empty' }, x.message))); }
       if (parts[2] === 'chat') return viewChat(courseCache.ctx, parts[3]);
+      if (parts[2] === 'notebook') return viewNotebook(courseCache.ctx, parts[3]);
       return viewLibrary(courseCache.ctx);
     }
     if (parts[0] === 'join' && location.hash !== '#/') { history.replaceState(null, '', '#/'); }

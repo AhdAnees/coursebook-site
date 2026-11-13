@@ -136,6 +136,39 @@ h2 { font-size: 1.2rem; margin: 0 0 10px; }
   .tabs a { padding: 9px 18px 11px; }
 }
 
+/* Notebook */
+.gate { padding: 28px; max-width: 560px; }
+.nb { display: grid; grid-template-columns: 280px 1fr; min-height: 460px; }
+.nb-side { border-right: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; overflow-y: auto; max-height: calc(100dvh - 190px); }
+.nb-subject { margin: 6px 0 4px; }
+.nb-sh { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.nb-sh b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-sh .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.nb-topic { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 26px; border-radius: 10px; text-decoration: none; color: inherit; }
+.nb-topic:hover, .nb-topic[aria-current="true"] { background: var(--accent-soft); }
+.nb-topic .m { color: var(--muted); font-size: .85rem; }
+.nb-main { min-width: 0; }
+.nb-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.nb-head h2 { flex: 1; margin: 0; }
+.nb-head .back { display: none; }
+.nb-notes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 16px; }
+.nb-note { text-align: left; background: #fefbec; color: #2a2a33; border: 0; border-radius: 4px 4px 12px 4px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 0 8px 16px -10px rgba(40, 40, 70, .35); transition: transform .15s; overflow: hidden; }
+.nb-note:nth-child(4n+2) { background: #eaf8f3; } .nb-note:nth-child(4n+3) { background: #f5f4fd; } .nb-note:nth-child(4n+4) { background: #fef5f8; }
+.nb-note:hover { transform: translateY(-2px); }
+.nb-note .m { color: #4c4c5c; font-size: .9rem; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.nb-note .m.small { font-size: .78rem; -webkit-line-clamp: 1; }
+.nb-editor { min-height: 46vh; resize: vertical; line-height: 1.55; }
+.nb-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+.nb-actions .grow { flex: 1; }
+@media (max-width: 760px) {
+  .nb { grid-template-columns: 1fr; }
+  .nb.open .nb-side { display: none; }
+  .nb:not(.open) .nb-main { display: none; }
+  .nb-side { max-height: none; border-right: 0; }
+  .nb-head .back { display: inline-flex; }
+}
+
 /* Dialog: note viewer and photo viewer */
 dialog { border: 0; border-radius: 18px; padding: 0; max-width: min(720px, 94vw); width: 100%; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 dialog::backdrop { background: rgba(10, 10, 20, .55); }
