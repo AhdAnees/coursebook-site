@@ -159,6 +159,36 @@ h2 { font-size: 1.2rem; margin: 0 0 10px; }
 .nb-note .m { color: #4c4c5c; font-size: .9rem; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .nb-note .m.small { font-size: .78rem; -webkit-line-clamp: 1; }
 .nb-editor { min-height: 46vh; resize: vertical; line-height: 1.55; }
+.nb-title { flex: 1; min-width: 0; }
+.nb-title h2 { margin: 0 0 4px; }
+.nb-tools { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 0; }
+.nb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 6px 12px; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.chip[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.nb-feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 16px; align-items: start; }
+.nb-card { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; min-width: 0; }
+.nb-card .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nb-card .t { font-weight: 700; overflow-wrap: anywhere; }
+.nb-card a.t { color: var(--accent); }
+.nb-card .m { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.nb-card .ico { font-size: 1.3rem; line-height: 1; }
+.nb-card .del { opacity: .55; padding: 4px 6px; }
+.nb-card .del:hover { opacity: 1; }
+.nb-card.task { cursor: pointer; }
+.nb-card.task input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
+.nb-card.task.done .t { text-decoration: line-through; color: var(--muted); }
+.nb-card.media { flex-direction: column; }
+.nb-card.media .del { align-self: flex-end; margin-top: -4px; }
+.nb-media-body { width: 100%; display: flex; align-items: center; gap: 10px; }
+.nb-card.image .nb-media-body, .nb-card.video .nb-media-body { min-height: 60px; }
+.nb-media-body img { width: 100%; max-height: 240px; object-fit: cover; border-radius: 10px; cursor: zoom-in; display: block; }
+.nb-media-body video { width: 100%; max-height: 260px; border-radius: 10px; background: #000; }
+.nb-media-body audio { width: 100%; }
+.nb-add { position: relative; }
+.nb-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; min-width: 260px; display: flex; flex-direction: column; }
+.nb-menu[hidden] { display: none; }
+.nb-menu button { text-align: left; background: none; border: 0; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+.nb-menu button:hover, .nb-menu button:focus-visible { background: var(--accent-soft); }
 .nb-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
 .nb-actions .grow { flex: 1; }
 @media (max-width: 760px) {

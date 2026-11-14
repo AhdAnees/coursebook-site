@@ -631,26 +631,52 @@
     fail(r.error);
   }
 
-  /** The course's notebook from the server: subjects → topics → notes, decrypted. */
+  /** The course's notebook from the server, decrypted: subjects, topics and everything inside them. */
   async function loadNotebook(courseId) {
-    var r = await sb.from('notes_sync').select('id, kind, payload').eq('course_id', courseId).eq('deleted', false).limit(5000); fail(r.error);
-    var subjects = [], topics = [], notes = [], unreadable = 0;
+    var r = await sb.from('notes_sync').select('id, kind, payload').eq('course_id', courseId).eq('deleted', false).limit(10000); fail(r.error);
+    var nb = { subjects: [], topics: [], note: [], link: [], task: [], reminder: [], attachment: [], unreadable: 0 };
     for (var i = 0; i < (r.data || []).length; i++) {
       var row = r.data[i];
       try {
         var d = await decryptItem(row.id, row.kind, row.payload); d.id = row.id;
-        (row.kind === 'subject' ? subjects : row.kind === 'topic' ? topics : notes).push(d);
-      } catch (e) { unreadable++; }
+        (row.kind === 'subject' ? nb.subjects : row.kind === 'topic' ? nb.topics : nb[row.kind] || []).push(d);
+      } catch (e) { nb.unreadable++; }
     }
-    var bySubject = function (a, b) { return (a.orderIndex || 0) - (b.orderIndex || 0) || String(a.title).localeCompare(String(b.title)); };
-    subjects.sort(bySubject); topics.sort(bySubject);
-    notes.sort(function (a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)); });
-    var subjectIds = new Set(subjects.map(function (s) { return s.id; }));
-    topics = topics.filter(function (t) { return subjectIds.has(t.subjectId); });
-    return { subjects: subjects, topics: topics, notes: notes, unreadable: unreadable };
+    var byOrder = function (a, b) { return (a.orderIndex || 0) - (b.orderIndex || 0) || String(a.title).localeCompare(String(b.title)); };
+    nb.subjects.sort(byOrder); nb.topics.sort(byOrder);
+    var subjectIds = new Set(nb.subjects.map(function (s) { return s.id; }));
+    nb.topics = nb.topics.filter(function (t) { return subjectIds.has(t.subjectId); });
+    return nb;
   }
 
-  function noteTitle(n) { var first = String(n.content || '').split('\n').map(function (l) { return l.replace(/^[#>\-*\s]+|\*\*|__|\+\+|\{[^}]*\}/g, '').trim(); }).filter(Boolean)[0]; return first ? first.slice(0, 80) : 'Empty note'; }
+  function noteTitle(n) { var first = String(n.content || '').split('\n').map(function (l) { return l.replace(/^[#>\-*\s]+|\*\*|__|\+\+|\{[^}]*\}|\[[ xX]\]\s*/g, '').trim(); }).filter(Boolean)[0]; return first ? first.slice(0, 80) : 'Empty note'; }
+
+  // Decrypted attachment files, as object URLs (kept for the visit).
+  var fileUrls = new Map();
+  async function attachmentUrl(a) {
+    if (fileUrls.has(a.id)) return fileUrls.get(a.id);
+    if (!a.blob) throw new Error('This file is only on the phone it was added on (it is over 20 MB).');
+    var dl = await sb.storage.from('notes-files').download(a.blob); fail(dl.error);
+    var sealed = new Uint8Array(await dl.data.arrayBuffer());
+    if (sealed[0] !== 1) throw new Error('Unknown encrypted file format.');
+    var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.subarray(1, 13), additionalData: enc.encode(a.id + ':file') }, notesKey, sealed.subarray(13));
+    var url = URL.createObjectURL(new Blob([plain], { type: a.mimeType || 'application/octet-stream' }));
+    fileUrls.set(a.id, url);
+    return url;
+  }
+  async function uploadAttachment(courseId, topic, file, tag, caption) {
+    if (file.size > 20 * 1024 * 1024) throw new Error('Files can be up to 20 MB. For bigger files, put them in Google Drive or OneDrive and add the link instead.');
+    var id = uuid(), path = state.user.id + '/' + id;
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(id + ':file') }, notesKey, await file.arrayBuffer()));
+    var sealed = new Uint8Array(13 + ct.length); sealed[0] = 1; sealed.set(iv, 1); sealed.set(ct, 13);
+    var up = await sb.storage.from('notes-files').upload(path, sealed, { contentType: 'application/octet-stream', upsert: true }); fail(up.error);
+    var mime = file.type || 'application/octet-stream';
+    var type = /^image\//.test(mime) ? 'image' : /^video\//.test(mime) ? 'video' : /^audio\//.test(mime) ? 'audio' : mime === 'application/pdf' ? 'pdf' : 'file';
+    try {
+      await saveItem(courseId, id, 'attachment', { topicId: topic.id, type: type, fileName: file.name || 'file', mimeType: mime, fileSize: file.size, durationMs: null, keywords: [tag], caption: caption || '', createdAt: new Date().toISOString(), blob: path });
+    } catch (x) { await sb.storage.from('notes-files').remove([path]); throw x; }
+  }
 
   async function viewNotebook(ctx, topicId) {
     var panel = h('section', { class: 'panel' }, h('p', { class: 'empty' }, 'Opening your notebook…'));
@@ -665,36 +691,42 @@
     } catch (x) { panel.replaceChildren(h('p', { class: 'empty error' }, x.message)); }
   }
 
-  /** Unlock (or first-time setup) form. */
+  /** Unlock form, or first-time setup for people without the phone app. */
   function notesGate(ctx, isSetUp) {
     var pw = h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Notes password' });
     var pw2 = isSetUp ? null : h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Type it again' });
     var err = errorBox();
-    var btn = h('button', { class: 'btn', type: 'submit' }, isSetUp ? 'Unlock' : 'Turn on notes');
+    var label = isSetUp ? 'Unlock' : 'Turn on notes';
+    var btn = h('button', { class: 'btn', type: 'submit' }, label);
     var form = h('form', { onsubmit: async function (e) {
       e.preventDefault(); setError(err, null);
       if (!isSetUp && pw.value.length < 8) return setError(err, new Error('Use at least 8 characters.'));
       if (!isSetUp && pw.value !== pw2.value) return setError(err, new Error('The two passwords don’t match.'));
-      busy(btn, true, [btn.textContent, 'Unlocking…']);
+      busy(btn, true, [label, 'Unlocking…']);
       try { isSetUp ? await unlockNotes(pw.value) : await setUpNotes(pw.value); viewNotebook(ctx); }
-      catch (x) { setError(err, x); btn.disabled = false; btn.textContent = isSetUp ? 'Unlock' : 'Turn on notes'; }
+      catch (x) { setError(err, x); busy(btn, false, [label, '']); }
     } },
       h('label', { class: 'field' }, h('span', null, isSetUp ? 'Notes password' : 'Choose a notes password (8 or more characters)'), pw),
       pw2 ? h('label', { class: 'field' }, h('span', null, 'Type it again'), pw2) : null,
       btn, err);
     return h('div', { class: 'gate' },
-      h('h2', null, isSetUp ? 'Unlock your notebook' : 'Your notebook on the web'),
+      h('h2', null, isSetUp ? 'Unlock your notebook' : 'Start your notebook'),
       h('p', { class: 'sub' }, isSetUp
-        ? 'Your notes are locked with your notes password, so only you can read them. It’s the one you chose in the phone app (Profile & Settings → Notes on the web).'
-        : 'Turn it on in the phone app (Profile & Settings → Notes on the web) to bring your phone’s notes here. No phone app? Choose a notes password to start writing notes here.'),
-      isSetUp ? null : h('p', { class: 'note-line' }, 'If you forget the notes password, your synced notes can’t be recovered. Nobody, not even Liyaa Note, can open them.'),
+        ? 'Your notebook is locked with your notes password, so only you can read it.'
+        : 'Choose a notes password to keep your notes, photos, files, links and tasks here, locked so only you can read them. Already using the phone app? Turn on Notes on the web there (Profile & Settings) and use the same notes password.'),
+      isSetUp ? null : h('p', { class: 'note-line' }, 'If you forget the notes password, your synced notebook can’t be recovered. Nobody, not even Liyaa Note, can open it.'),
       form);
   }
+
+  var FILTERS = [['all', 'All'], ['notes', 'Notes'], ['docs', 'Docs'], ['image', 'Photos'], ['audio', 'Audio'], ['video', 'Video'], ['links', 'Links'], ['tasks', 'Tasks']];
+  var DOC_ICON = { pdf: '📕', file: '📄' };
 
   function notebookBody(ctx, nb, topicId) {
     var courseId = ctx.course.id;
     var topic = nb.topics.filter(function (t) { return t.id === topicId; })[0] || null;
-    function go(id) { location.hash = '#/c/' + courseId + '/notebook' + (id ? '/' + id : ''); }
+    function reopen(id) { viewNotebook(ctx, id === undefined ? topicId : id); }
+    function inTopic(list, t) { return list.filter(function (x) { return x.topicId === t.id; }); }
+    function countFor(t) { return inTopic(nb.note, t).length + inTopic(nb.link, t).length + inTopic(nb.attachment, t).length + nb.task.filter(function (k) { return k.parentType === 'topic' && k.parentId === t.id; }).length + inTopic(nb.reminder, t).length; }
 
     var side = h('nav', { class: 'nb-side', 'aria-label': 'Subjects and topics' },
       nb.subjects.length ? nb.subjects.map(function (s) {
@@ -703,34 +735,23 @@
           h('div', { class: 'nb-sh' }, h('span', { class: 'dot', style: 'background:' + (/^#[0-9a-f]{3,8}$/i.test(s.color || '') ? s.color : '#4F6DF5') }), h('b', null, s.title),
             h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Add a topic to ' + s.title, onclick: function () { addTopic(s, ts.length); } }, '＋')),
           ts.map(function (t) {
-            var count = nb.notes.filter(function (n) { return n.topicId === t.id; }).length;
-            return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, String(count)));
+            return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, String(countFor(t))));
           }));
       }) : h('p', { class: 'note-line', style: 'padding:8px' }, 'No subjects yet.'),
       h('button', { class: 'btn soft small', type: 'button', style: 'margin:8px', onclick: addSubject }, '＋ New subject'),
-      h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'));
+      h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'),
+      nb.unreadable ? h('p', { class: 'note-line', style: 'padding:8px' }, nb.unreadable + ' item(s) couldn’t be unlocked with this key.') : null);
 
     var main = h('div', { class: 'nb-main' });
-    if (!topic) {
-      main.appendChild(h('div', { class: 'pick' }, nb.subjects.length ? 'Pick a topic to see its notes.' : 'Start with a subject (like a module or day), then add topics and notes.'));
-    } else {
-      var list = nb.notes.filter(function (n) { return n.topicId === topic.id; });
-      main.append(
-        h('div', { class: 'nb-head' }, h('a', { class: 'back', href: '#/c/' + courseId + '/notebook', 'aria-label': 'All topics' }, '←'), h('h2', null, topic.title),
-          h('button', { class: 'btn small', type: 'button', onclick: function () { editNote(null); } }, '＋ New note')),
-        list.length ? h('div', { class: 'nb-notes' }, list.map(function (n) {
-          return h('button', { class: 'nb-note', type: 'button', onclick: function () { editNote(n); } },
-            h('b', null, noteTitle(n)), h('span', { class: 'm' }, String(n.content || '').slice(0, 220)), h('span', { class: 'm small' }, 'Edited ' + fmtDate(n.updatedAt)));
-        })) : h('p', { class: 'empty' }, 'No notes in this topic yet.'));
-    }
-    if (nb.unreadable) main.appendChild(h('p', { class: 'note-line', style: 'padding:0 16px 16px' }, nb.unreadable + ' item(s) couldn’t be unlocked with this key.'));
+    if (!topic) main.appendChild(h('div', { class: 'pick' }, nb.subjects.length ? 'Pick a topic to see what’s in it.' : 'Start with a subject (like a module or day), then add topics.'));
+    else main.appendChild(topicPage(topic));
 
     async function addSubject() {
       var title = (prompt('Name of the new subject (e.g. Day 1 or Module 2):') || '').trim(); if (!title) return;
       try {
-        var id = uuid(), now = new Date().toISOString();
-        await saveItem(courseId, id, 'subject', { courseId: courseId, title: title.slice(0, 80), color: SUBJECT_COLORS[nb.subjects.length % SUBJECT_COLORS.length], orderIndex: nb.subjects.length, createdAt: now, updatedAt: now });
-        viewNotebook(ctx, topicId);
+        var now = new Date().toISOString();
+        await saveItem(courseId, uuid(), 'subject', { courseId: courseId, title: title.slice(0, 80), color: SUBJECT_COLORS[nb.subjects.length % SUBJECT_COLORS.length], orderIndex: nb.subjects.length, createdAt: now, updatedAt: now });
+        reopen();
       } catch (x) { toast(x.message); }
     }
     async function addTopic(s, n) {
@@ -738,9 +759,161 @@
       try {
         var id = uuid(), now = new Date().toISOString();
         await saveItem(courseId, id, 'topic', { subjectId: s.id, title: title.slice(0, 80), keywords: [], orderIndex: n, createdAt: now, updatedAt: now });
-        go(id);
+        location.hash = '#/c/' + courseId + '/notebook/' + id;
       } catch (x) { toast(x.message); }
     }
+
+    /** The topic, like the app: tags, search, filters with counts, then everything in it, newest first. */
+    function topicPage(t) {
+      var notes = inTopic(nb.note, t), links = inTopic(nb.link, t), atts = inTopic(nb.attachment, t), rems = inTopic(nb.reminder, t);
+      var tasks = nb.task.filter(function (k) { return k.parentType === 'topic' && k.parentId === t.id; });
+      var feed = [].concat(
+        notes.map(function (x) { return { kind: 'note', f: 'notes', at: x.updatedAt || x.createdAt, x: x, text: x.content }; }),
+        atts.map(function (x) { return { kind: 'attachment', f: x.type === 'pdf' || x.type === 'file' ? 'docs' : x.type, at: x.createdAt, x: x, text: [x.fileName, x.caption].concat(x.keywords || []).join(' ') }; }),
+        links.map(function (x) { return { kind: 'link', f: 'links', at: x.updatedAt || x.createdAt, x: x, text: [x.title, x.url, x.note, x.area].concat(x.keywords || []).join(' ') }; }),
+        tasks.map(function (x) { return { kind: 'task', f: 'tasks', at: x.createdAt, x: x, text: x.title }; }),
+        rems.map(function (x) { return { kind: 'reminder', f: 'tasks', at: x.createdAt, x: x, text: x.title }; }));
+      feed.sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+      var counts = { all: feed.length }; feed.forEach(function (i) { counts[i.f] = (counts[i.f] || 0) + 1; });
+      var filter = 'all';
+      var search = h('input', { type: 'search', placeholder: 'Search this topic', 'aria-label': 'Search this topic' });
+      var chips = h('div', { class: 'nb-chips', role: 'tablist', 'aria-label': 'Show' });
+      var list = h('div', { class: 'nb-feed' });
+      function drawChips() {
+        chips.replaceChildren.apply(chips, FILTERS.filter(function (f) { return f[0] === 'all' || counts[f[0]]; }).map(function (f) {
+          return h('button', { class: 'chip', type: 'button', role: 'tab', 'aria-selected': String(filter === f[0]), onclick: function () { filter = f[0]; drawChips(); draw(); } }, f[1] + ' ' + (counts[f[0]] || 0));
+        }));
+      }
+      function draw() {
+        var q = search.value.trim().toLowerCase();
+        var shown = feed.filter(function (i) { return (filter === 'all' || i.f === filter) && (!q || String(i.text || '').toLowerCase().indexOf(q) >= 0); });
+        if (!shown.length) return list.replaceChildren(h('p', { class: 'empty' }, feed.length ? 'Nothing matches.' : 'Nothing here yet. Use ＋ Add.'));
+        list.replaceChildren.apply(list, shown.map(card));
+      }
+      search.addEventListener('input', draw);
+      drawChips(); draw();
+      return h('div', null,
+        h('div', { class: 'nb-head' }, h('a', { class: 'back', href: '#/c/' + courseId + '/notebook', 'aria-label': 'All topics' }, '←'),
+          h('div', { class: 'nb-title' }, h('h2', null, t.title), (t.keywords || []).length ? h('div', null, t.keywords.map(function (k) { return h('span', { class: 'pill' }, '#' + k); })) : null),
+          addMenu(t)),
+        h('div', { class: 'nb-tools' }, search, chips),
+        list);
+    }
+
+    function card(i) {
+      var x = i.x;
+      if (i.kind === 'note') return h('button', { class: 'nb-note', type: 'button', onclick: function () { editNote(x); } },
+        h('b', null, noteTitle(x)), h('span', { class: 'm' }, String(x.content || '').slice(0, 260)), h('span', { class: 'm small' }, 'Note · ' + fmtDate(x.updatedAt)));
+      if (i.kind === 'link') {
+        var u = safeUrl(x.url);
+        return h('div', { class: 'nb-card' }, h('span', { class: 'ico' }, '🔗'),
+          h('div', { class: 'grow' }, u ? h('a', { href: u, target: '_blank', rel: 'noopener', class: 't' }, x.title || u) : h('span', { class: 't' }, x.title),
+            h('span', { class: 'm' }, [x.area, u ? new URL(u).hostname : ''].filter(Boolean).join(' · ')), x.note ? h('span', { class: 'm' }, x.note) : null),
+          del(x, 'link'));
+      }
+      if (i.kind === 'task') {
+        var box = h('input', { type: 'checkbox', 'aria-label': 'Done: ' + x.title });
+        box.checked = !!x.done;
+        box.addEventListener('change', async function () {
+          try { await saveItem(courseId, x.id, 'task', Object.assign({}, x, { id: undefined, done: box.checked })); x.done = box.checked; }
+          catch (e) { box.checked = !box.checked; toast(e.message); }
+        });
+        return h('label', { class: 'nb-card task' + (x.done ? ' done' : '') }, box,
+          h('div', { class: 'grow' }, h('span', { class: 't' }, x.title), x.dueDate ? h('span', { class: 'm' }, 'Due ' + fmtDate(x.dueDate)) : null), del(x, 'task'));
+      }
+      if (i.kind === 'reminder') return h('div', { class: 'nb-card' }, h('span', { class: 'ico' }, '⏰'),
+        h('div', { class: 'grow' }, h('span', { class: 't' }, x.title), h('span', { class: 'm' }, new Date(x.remindAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))), del(x, 'reminder'));
+      return mediaCard(x);
+    }
+
+    function mediaCard(a) {
+      var label = a.caption || a.fileName;
+      var body = h('div', { class: 'nb-media-body' }, h('span', { class: 'ico' }, a.type === 'image' ? '🖼️' : a.type === 'video' ? '🎬' : a.type === 'audio' ? '🎧' : DOC_ICON[a.type] || '📄'));
+      var el = h('div', { class: 'nb-card media ' + a.type },
+        body,
+        h('div', { class: 'grow' }, h('span', { class: 't' }, label), h('span', { class: 'm' }, [a.fileName !== label ? a.fileName : '', a.fileSize ? Math.max(1, Math.round(a.fileSize / 1024)) + ' KB' : '', !a.blob ? 'on the phone only' : ''].filter(Boolean).join(' · ')),
+          (a.keywords || []).length ? h('span', null, a.keywords.map(function (k) { return h('span', { class: 'pill' }, '#' + k); })) : null),
+        del(a, 'attachment'));
+      async function load() {
+        try {
+          var url = await attachmentUrl(a);
+          if (a.type === 'image') body.replaceChildren(h('img', { src: url, alt: label, onclick: function () { photoDialog(url, label); } }));
+          else if (a.type === 'video') body.replaceChildren(h('video', { src: url, controls: true, preload: 'metadata' }));
+          else if (a.type === 'audio') body.replaceChildren(h('audio', { src: url, controls: true }));
+          else window.open(url, '_blank', 'noopener');
+        } catch (x) { toast(x.message); }
+      }
+      if (a.blob) {
+        if (a.type === 'image') load();
+        else body.appendChild(h('button', { class: 'btn soft small', type: 'button', onclick: load }, a.type === 'video' || a.type === 'audio' ? '▶ Play' : 'Open'));
+      }
+      return el;
+    }
+
+    function del(x, kind) {
+      return h('button', { class: 'btn plain small del', type: 'button', 'aria-label': 'Delete', onclick: async function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (!confirm('Delete this? It will also disappear from your phone.')) return;
+        try { await deleteItem(x.id, kind); if (kind === 'attachment' && x.blob) await sb.storage.from('notes-files').remove([x.blob]); reopen(); }
+        catch (er) { toast(er.message); }
+      } }, '🗑');
+    }
+
+    function addMenu(t) {
+      var fileIn = h('input', { type: 'file', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
+      fileIn.addEventListener('change', async function () {
+        var files = Array.prototype.slice.call(fileIn.files || []); fileIn.value = ''; if (!files.length) return;
+        var tag = (prompt('A tag for ' + (files.length > 1 ? 'these files' : files[0].name) + ' (so you can find it later):', (t.keywords || [])[0] || t.title) || '').trim();
+        if (!tag) return;
+        toast('Locking and uploading ' + files.length + ' file(s)…');
+        try { for (var i = 0; i < files.length; i++) await uploadAttachment(courseId, t, files[i], tag.slice(0, 30), ''); reopen(); }
+        catch (x) { toast(x.message); reopen(); }
+      });
+      var menu = h('div', { class: 'nb-menu', hidden: true, role: 'menu' },
+        item('📝 Note', function () { editNote(null); }),
+        item('🖼️ Photo, video, recording or file', function () { fileIn.click(); }),
+        item('🔗 Link', addLink),
+        item('✅ Task', addTask),
+        item('⏰ Reminder', addReminder));
+      function item(label, fn) { return h('button', { type: 'button', role: 'menuitem', onclick: function () { menu.hidden = true; fn(); } }, label); }
+      var btn = h('button', { class: 'btn small', type: 'button', 'aria-haspopup': 'menu', onclick: function (e) { e.stopPropagation(); menu.hidden = !menu.hidden; } }, '＋ Add');
+      document.addEventListener('click', function () { menu.hidden = true; });
+      return h('div', { class: 'nb-add' }, btn, menu, fileIn);
+
+      async function addLink() {
+        var raw = (prompt('Paste the link (starting with https://):') || '').trim(); if (!raw) return;
+        var url = safeUrl(raw); if (!url) return toast('That doesn’t look like a web link. Copy the full link, starting with https://');
+        var title = (prompt('A name for this link:', '') || '').trim() || new URL(url).hostname;
+        try { var now = new Date().toISOString(); await saveItem(courseId, uuid(), 'link', { topicId: t.id, url: url, title: title.slice(0, 120), area: '', keywords: [((t.keywords || [])[0] || 'link').slice(0, 30)], note: '', createdAt: now, updatedAt: now }); reopen(); }
+        catch (x) { toast(x.message); }
+      }
+      async function addTask() {
+        var title = (prompt('What needs doing?') || '').trim(); if (!title) return;
+        try { await saveItem(courseId, uuid(), 'task', { parentType: 'topic', parentId: t.id, title: title.slice(0, 200), done: false, dueDate: null, reminderAt: null, createdAt: new Date().toISOString() }); reopen(); }
+        catch (x) { toast(x.message); }
+      }
+      function addReminder() {
+        var title = h('input', { type: 'text', required: true, maxlength: '120', 'aria-label': 'Reminder' });
+        var when = h('input', { type: 'datetime-local', required: true, 'aria-label': 'When' });
+        var err = errorBox();
+        var d = h('dialog', { 'aria-label': 'New reminder' },
+          h('div', { class: 'dh' }, h('span', null, 'New reminder · ' + t.title), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
+          h('form', { class: 'db', style: 'white-space:normal', onsubmit: async function (e) {
+            e.preventDefault(); setError(err, null);
+            var at = new Date(when.value);
+            if (!title.value.trim() || isNaN(at)) return setError(err, new Error('Add a title and a date and time.'));
+            try { await saveItem(courseId, uuid(), 'reminder', { topicId: t.id, title: title.value.trim(), remindAt: at.toISOString(), notified: false, createdAt: new Date().toISOString() }); d.close(); reopen(); }
+            catch (x) { setError(err, x); }
+          } },
+            h('label', { class: 'field' }, h('span', null, 'Remind me to'), title),
+            h('label', { class: 'field' }, h('span', null, 'When'), when),
+            h('p', { class: 'note-line' }, 'Your phone shows the notification once it has synced.'),
+            h('button', { class: 'btn', type: 'submit' }, 'Save'), err));
+        d.addEventListener('close', function () { d.remove(); });
+        document.body.appendChild(d); d.showModal(); title.focus();
+      }
+    }
+
     function editNote(n) {
       var area = h('textarea', { class: 'nb-editor', 'aria-label': 'Note text', maxlength: '30000', placeholder: 'Write your note…' });
       area.value = n ? n.content || '' : '';
@@ -751,17 +924,17 @@
         try {
           var now = new Date().toISOString();
           await saveItem(courseId, n ? n.id : uuid(), 'note', { topicId: topic.id, content: area.value, createdAt: n ? n.createdAt : now, updatedAt: now });
-          d.close(); viewNotebook(ctx, topic.id);
+          d.close(); reopen();
         } catch (x) { setError(err, x); save.disabled = false; }
       } }, 'Save');
-      var del = n ? h('button', { class: 'btn plain', type: 'button', style: 'color:var(--danger)', onclick: async function () {
+      var delBtn = n ? h('button', { class: 'btn plain', type: 'button', style: 'color:var(--danger)', onclick: async function () {
         if (!confirm('Delete this note? It will also disappear from your phone.')) return;
-        try { await deleteItem(n.id, 'note'); d.close(); viewNotebook(ctx, topic.id); } catch (x) { setError(err, x); }
+        try { await deleteItem(n.id, 'note'); d.close(); reopen(); } catch (x) { setError(err, x); }
       } }, 'Delete') : null;
       var d = h('dialog', { 'aria-label': n ? 'Edit note' : 'New note' },
         h('div', { class: 'dh' }, h('span', null, (n ? 'Edit note' : 'New note') + ' · ' + topic.title), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
         h('div', { class: 'db', style: 'white-space:normal' }, area, err,
-          h('div', { class: 'nb-actions' }, del, h('span', { class: 'grow' }), save),
+          h('div', { class: 'nb-actions' }, delBtn, h('span', { class: 'grow' }), save),
           h('p', { class: 'note-line' }, 'Locked with your notes password before it leaves this browser. It appears on your phone at its next sync.')));
       d.addEventListener('close', function () { d.remove(); });
       document.body.appendChild(d); d.showModal(); area.focus();
