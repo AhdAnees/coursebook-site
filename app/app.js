@@ -21,7 +21,16 @@
     ['Report problems', 'If something is wrong, use Report. The course owner and Liyaa Note can remove content and accounts.'],
   ];
 
-  var state = { session: null, user: null, account: null, channel: null, pendingCode: null };
+  var state = { session: null, user: null, account: null, channel: null, pendingCode: null, recovery: false };
+  var WEB_RETURN = location.origin + location.pathname;
+
+  // Arriving from a link in an email: Supabase puts the result in the address (#access_token=… or #error=…).
+  var landing = (function () {
+    var p = new URLSearchParams(location.hash.replace(/^#/, ''));
+    if (!p.get('access_token') && !p.get('error') && !p.get('error_description')) return null;
+    return { type: p.get('type') || '', error: p.get('error_description') || p.get('error') || '', code: p.get('error_code') || '' };
+  })();
+  function cleanAddress() { history.replaceState(null, '', location.pathname + '#/'); }
 
   // ---------- Small helpers ----------
 
@@ -137,7 +146,7 @@
         if (reserved.data === true) throw new Error('Please use your own name, not a title like President or Admin.');
         var r = await sb.auth.signUp({ email: email.value.trim(), password: pass.value, options: {
           data: { display_name: name.value.trim(), full_name: '', phone: '', rules_accepted: 'true' },
-          emailRedirectTo: location.origin + location.pathname,
+          emailRedirectTo: WEB_RETURN,
         } });
         fail(r.error);
         if (r.data.user && !r.data.session && r.data.user.identities && r.data.user.identities.length === 0) throw new Error('There is already an account with this email. Sign in instead.');
@@ -167,9 +176,13 @@
       h('label', { class: 'field' }, h('span', null, 'Code from the email'), code), btn, err,
       h('p', { class: 'switch' }, 'No email? Check spam, or ', h('a', { href: '#', onclick: async function (e) {
         e.preventDefault();
-        var r = await sb.auth.resend({ type: 'signup', email: email });
+        var r = await sb.auth.resend({ type: 'signup', email: email, options: { emailRedirectTo: WEB_RETURN } });
         r.error ? setError(err, new Error(friendly(r.error.message))) : toast('We sent a new code.');
       } }, 'send a new code'), '.'));
+    form.appendChild(h('div', { class: 'rules', style: 'margin-top:16px' },
+      h('b', null, 'Email has a link instead of a code? '),
+      'Tap the link: it confirms your account. Then come back here and sign in.'));
+    form.appendChild(h('button', { class: 'btn soft block', type: 'button', onclick: function () { viewSignIn(email); } }, 'I tapped the link: sign in'));
     show(authShell('Check your email', 'We sent a code to ' + email + '.', form));
     code.focus();
   }
@@ -180,7 +193,7 @@
     var btn = h('button', { class: 'btn block', type: 'submit' }, 'Send me a code');
     var form = h('form', { onsubmit: async function (e) {
       e.preventDefault(); setError(err, null); busy(btn, true, ['Send me a code', 'Sending…']);
-      try { var r = await sb.auth.resetPasswordForEmail(email.value.trim()); fail(r.error); viewResetCode(email.value.trim()); }
+      try { var r = await sb.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: WEB_RETURN }); fail(r.error); viewResetCode(email.value.trim()); }
       catch (x) { setError(err, x); busy(btn, false, ['Send me a code', '']); }
     } }, h('label', { class: 'field' }, h('span', null, 'Email'), email), btn, err,
       h('p', { class: 'switch' }, h('a', { href: '#', onclick: function (e) { e.preventDefault(); viewSignIn(email.value); } }, 'Back to sign in')));
@@ -208,6 +221,21 @@
       h('label', { class: 'field' }, h('span', null, 'New password (8 or more characters)'), pass), btn, err);
     show(authShell('Enter the code', 'We sent it to ' + email + '.', form));
     code.focus();
+  }
+
+  function viewNewPassword() {
+    var pass = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8' });
+    var err = errorBox();
+    var btn = h('button', { class: 'btn block', type: 'submit' }, 'Save new password');
+    var form = h('form', { onsubmit: async function (e) {
+      e.preventDefault(); setError(err, null);
+      if (pass.value.length < 8) return setError(err, new Error('Use at least 8 characters for your password.'));
+      busy(btn, true, ['Save new password', 'Saving…']);
+      try { var u = await sb.auth.updateUser({ password: pass.value }); fail(u.error); state.recovery = false; toast('Password changed.'); route(); }
+      catch (x) { setError(err, x); busy(btn, false, ['Save new password', '']); }
+    } }, h('label', { class: 'field' }, h('span', null, 'New password (8 or more characters)'), pass), btn, err);
+    show(authShell('Choose a new password', null, form));
+    pass.focus();
   }
 
   // ---------- Account checks ----------
@@ -953,7 +981,16 @@
     var parts = hash.split('/').filter(Boolean);
     if (parts[0] === 'join' && parts[1]) state.pendingCode = parts[1].toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 
-    if (!state.session) return viewSignIn();
+    if (!state.session) {
+      viewSignIn();
+      if (landing && landing.error) {
+        var box = root.querySelector('.error');
+        setError(box, new Error(/expired|invalid/i.test(landing.code + landing.error) ? 'That email link has expired or was already used. If you confirmed your account, sign in. Otherwise create it again.' : landing.error));
+        landing = null;
+      }
+      return;
+    }
+    if (state.recovery) return viewNewPassword();
     if (!state.account) { try { await loadAccount(); } catch (x) { return show(topBar(), h('main', { class: 'page' }, h('p', { class: 'error' }, x.message))); } }
     if (state.account.banned) return viewBanned();
     if (!state.account.rulesAccepted) return viewRules();
@@ -971,7 +1008,9 @@
   }
 
   var started = false;
-  sb.auth.onAuthStateChange(function (_event, session) {
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (event === 'PASSWORD_RECOVERY' || (landing && landing.type === 'recovery' && session)) { state.recovery = true; setTimeout(route, 0); }
+    if (landing && (session || landing.error)) { if (!landing.error) landing = null; cleanAddress(); }
     var was = state.session ? state.session.user.id : null, now = session ? session.user.id : null;
     state.session = session; state.user = session ? session.user : null;
     if (!started || now !== was) { started = true; state.account = null; courseCache = { id: null, ctx: null }; setTimeout(route, 0); }
