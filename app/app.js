@@ -677,6 +677,47 @@
     return nb;
   }
 
+  /** "#week 1, intro,  #Intro" → ["week 1", "intro"] (like the app: up to 10, 30 characters each). */
+  function tagsFrom(text) {
+    var out = [];
+    String(text || '').split(/[,\n]/).forEach(function (t) {
+      var tag = t.trim().replace(/^#+/, '').trim().slice(0, 30);
+      if (tag && !out.some(function (o) { return o.toLowerCase() === tag.toLowerCase(); })) out.push(tag);
+    });
+    return out.slice(0, 10);
+  }
+  var tagsText = function (list) { return (list || []).join(', '); };
+
+  /** A small form in a dialog. fields: [{ key, label, value, placeholder, hint, required, multiline, type, max }]. */
+  function formDialog(o) {
+    var inputs = {};
+    var err = errorBox();
+    var save = h('button', { class: 'btn', type: 'submit' }, o.submit || 'Save');
+    var form = h('form', { class: 'db', style: 'white-space:normal', onsubmit: async function (e) {
+      e.preventDefault(); setError(err, null);
+      var v = {}; Object.keys(inputs).forEach(function (k) { v[k] = inputs[k].value.trim(); });
+      var missing = o.fields.filter(function (f) { return f.required && !v[f.key]; })[0];
+      if (missing) return setError(err, new Error('Fill in: ' + missing.label.replace(/ \(.*\)$/, '')));
+      save.disabled = true;
+      try { await o.onSubmit(v); d.close(); } catch (x) { setError(err, x); save.disabled = false; }
+    } },
+      o.intro ? h('p', { class: 'note-line', style: 'margin-top:0' }, o.intro) : null,
+      o.fields.map(function (f) {
+        var el = f.multiline ? h('textarea', { rows: '3', maxlength: f.max || '1000' }) : h('input', { type: f.type === 'url' ? 'text' : f.type || 'text', inputmode: f.type === 'url' ? 'url' : null, autocapitalize: f.type === 'url' ? 'off' : null, spellcheck: f.type === 'url' ? 'false' : null, maxlength: f.max || '200' });
+        el.value = f.value || ''; if (f.placeholder) el.placeholder = f.placeholder;
+        inputs[f.key] = el;
+        return h('label', { class: 'field' }, h('span', null, f.label), el, f.hint ? h('small', { class: 'note-line' }, f.hint) : null);
+      }),
+      err,
+      h('div', { class: 'nb-actions' }, o.danger || null, h('span', { class: 'grow' }), save));
+    var d = h('dialog', { 'aria-label': o.title },
+      h('div', { class: 'dh' }, h('span', null, o.title), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')), form);
+    d.addEventListener('close', function () { d.remove(); });
+    document.body.appendChild(d); d.showModal();
+    var first = inputs[o.fields[0].key]; if (first) first.focus();
+    return d;
+  }
+
   function noteTitle(n) { var first = String(n.content || '').split('\n').map(function (l) { return l.replace(/^[#>\-*\s]+|\*\*|__|\+\+|\{[^}]*\}|\[[ xX]\]\s*/g, '').trim(); }).filter(Boolean)[0]; return first ? first.slice(0, 80) : 'Empty note'; }
 
   // Decrypted attachment files, as object URLs (kept for the visit).
@@ -692,7 +733,7 @@
     fileUrls.set(a.id, url);
     return url;
   }
-  async function uploadAttachment(courseId, topic, file, tag, caption) {
+  async function uploadAttachment(courseId, topic, file, meta) {
     if (file.size > 20 * 1024 * 1024) throw new Error('Files can be up to 20 MB. For bigger files, put them in Google Drive or OneDrive and add the link instead.');
     var id = uuid(), path = state.user.id + '/' + id;
     var iv = crypto.getRandomValues(new Uint8Array(12));
@@ -702,8 +743,25 @@
     var mime = file.type || 'application/octet-stream';
     var type = /^image\//.test(mime) ? 'image' : /^video\//.test(mime) ? 'video' : /^audio\//.test(mime) ? 'audio' : mime === 'application/pdf' ? 'pdf' : 'file';
     try {
-      await saveItem(courseId, id, 'attachment', { topicId: topic.id, type: type, fileName: file.name || 'file', mimeType: mime, fileSize: file.size, durationMs: null, keywords: [tag], caption: caption || '', createdAt: new Date().toISOString(), blob: path });
+      await saveItem(courseId, id, 'attachment', { topicId: topic.id, type: type, fileName: withExt(meta.name, file.name || 'file'), mimeType: mime, fileSize: file.size, durationMs: null, keywords: meta.tags, caption: meta.caption || '', createdAt: new Date().toISOString(), blob: path });
     } catch (x) { await sb.storage.from('notes-files').remove([path]); throw x; }
+  }
+
+  /** A display name keeps the original file's extension ("Day 1" + "IMG_4017.jpeg" → "Day 1.jpeg"). */
+  function withExt(name, original) {
+    var ext = (/\.[A-Za-z0-9]{1,8}$/.exec(original) || [''])[0];
+    name = String(name || '').trim().replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 100);
+    if (!name) return original;
+    return ext && name.toLowerCase().slice(-ext.length) !== ext.toLowerCase() ? name + ext : name;
+  }
+  var stripExt = function (n) { return String(n || '').replace(/\.[A-Za-z0-9]{1,8}$/, ''); };
+
+  /** Removes items (and, for attachments, their stored files) everywhere. */
+  async function deleteAll(items) {
+    for (var i = 0; i < items.length; i++) {
+      await deleteItem(items[i].id, items[i].kind);
+      if (items[i].kind === 'attachment' && items[i].blob) await sb.storage.from('notes-files').remove([items[i].blob]);
+    }
   }
 
   async function viewNotebook(ctx, topicId) {
@@ -746,6 +804,7 @@
       form);
   }
 
+  var openSubjects = new Set();
   var FILTERS = [['all', 'All'], ['notes', 'Notes'], ['docs', 'Docs'], ['image', 'Photos'], ['audio', 'Audio'], ['video', 'Video'], ['links', 'Links'], ['tasks', 'Tasks']];
   var DOC_ICON = { pdf: '📕', file: '📄' };
 
@@ -759,12 +818,26 @@
     var side = h('nav', { class: 'nb-side', 'aria-label': 'Subjects and topics' },
       nb.subjects.length ? nb.subjects.map(function (s) {
         var ts = nb.topics.filter(function (t) { return t.subjectId === s.id; });
-        return h('div', { class: 'nb-subject' },
-          h('div', { class: 'nb-sh' }, h('span', { class: 'dot', style: 'background:' + (/^#[0-9a-f]{3,8}$/i.test(s.color || '') ? s.color : '#4F6DF5') }), h('b', null, s.title),
-            h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Add a topic to ' + s.title, onclick: function () { addTopic(s, ts.length); } }, '＋')),
-          ts.map(function (t) {
+        if (topic && topic.subjectId === s.id) openSubjects.add(s.id); // the subject of the open topic stays open
+        var open = openSubjects.has(s.id);
+        var list = h('div', { class: 'nb-topics', id: 'topics-' + s.id, hidden: !open },
+          ts.length ? ts.map(function (t) {
             return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, String(countFor(t))));
-          }));
+          }) : h('p', { class: 'note-line', style: 'padding:4px 10px 4px 26px;margin:0' }, 'No topics yet. Use ＋ to add one.'));
+        var toggle = h('button', { class: 'nb-sh-toggle', type: 'button', 'aria-expanded': String(open), 'aria-controls': 'topics-' + s.id, onclick: function () {
+          var nowOpen = list.hidden;
+          list.hidden = !nowOpen; toggle.setAttribute('aria-expanded', String(nowOpen));
+          if (nowOpen) openSubjects.add(s.id); else openSubjects.delete(s.id);
+        } },
+          h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
+          h('span', { class: 'dot', style: 'background:' + (/^#[0-9a-f]{3,8}$/i.test(s.color || '') ? s.color : '#4F6DF5') }),
+          h('b', null, s.title),
+          h('span', { class: 'm' }, ts.length + (ts.length === 1 ? ' topic' : ' topics')));
+        return h('div', { class: 'nb-subject' },
+          h('div', { class: 'nb-sh' }, toggle,
+            h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Add a topic to ' + s.title, onclick: function () { addTopic(s, ts.length); } }, '＋'),
+            h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Rename or delete ' + s.title, onclick: function () { editSubject(s); } }, '⋯')),
+          list);
       }) : h('p', { class: 'note-line', style: 'padding:8px' }, 'No subjects yet.'),
       h('button', { class: 'btn soft small', type: 'button', style: 'margin:8px', onclick: addSubject }, '＋ New subject'),
       h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'),
@@ -773,6 +846,48 @@
     var main = h('div', { class: 'nb-main' });
     if (!topic) main.appendChild(h('div', { class: 'pick' }, nb.subjects.length ? 'Pick a topic to see what’s in it.' : 'Start with a subject (like a module or day), then add topics.'));
     else main.appendChild(topicPage(topic));
+
+    /** Everything inside a topic, for deleting it. */
+    function topicContents(t) {
+      var mine = function (list, kind) { return list.filter(function (x) { return x.topicId === t.id; }).map(function (x) { return { id: x.id, kind: kind, blob: x.blob }; }); };
+      return [].concat(mine(nb.note, 'note'), mine(nb.link, 'link'), mine(nb.attachment, 'attachment'), mine(nb.reminder, 'reminder'),
+        nb.task.filter(function (k) { return k.parentType === 'topic' && k.parentId === t.id; }).map(function (k) { return { id: k.id, kind: 'task' }; }));
+    }
+    function editSubject(s) {
+      var ts = nb.topics.filter(function (t) { return t.subjectId === s.id; });
+      var inside = ts.reduce(function (n, t) { return n + 1 + topicContents(t).length; }, 0);
+      var d = formDialog({
+        title: 'Subject',
+        fields: [{ key: 'title', label: 'Subject name', value: s.title, required: true, max: '80' }],
+        onSubmit: async function (v) { await saveItem(courseId, s.id, 'subject', Object.assign({}, s, { id: undefined, title: v.title })); reopen(); },
+        danger: h('button', { class: 'btn plain', type: 'button', style: 'color:var(--danger)', onclick: async function () {
+          if (!confirm('Delete “' + s.title + '”' + (inside ? ' and the ' + inside + ' topic(s) and item(s) in it' : '') + '? It also disappears from your phone. This can’t be undone.')) return;
+          try {
+            var all = [];
+            ts.forEach(function (t) { all = all.concat(topicContents(t), [{ id: t.id, kind: 'topic' }]); });
+            all = all.concat(nb.task.filter(function (k) { return k.parentType === 'subject' && k.parentId === s.id; }).map(function (k) { return { id: k.id, kind: 'task' }; }));
+            await deleteAll(all.concat([{ id: s.id, kind: 'subject' }]));
+            d.close(); location.hash = '#/c/' + courseId + '/notebook'; reopen(null);
+          } catch (x) { toast(x.message); }
+        } }, 'Delete subject'),
+      });
+    }
+    function editTopic(t) {
+      var inside = topicContents(t).length;
+      var d = formDialog({
+        title: 'Topic',
+        fields: [
+          { key: 'title', label: 'Topic name', value: t.title, required: true, max: '80' },
+          { key: 'tags', label: '#Tags (separate with commas)', value: tagsText(t.keywords), placeholder: 'e.g. week 1, exam' },
+        ],
+        onSubmit: async function (v) { await saveItem(courseId, t.id, 'topic', Object.assign({}, t, { id: undefined, title: v.title, keywords: tagsFrom(v.tags) })); reopen(); },
+        danger: h('button', { class: 'btn plain', type: 'button', style: 'color:var(--danger)', onclick: async function () {
+          if (!confirm('Delete the topic “' + t.title + '”' + (inside ? ' and the ' + inside + ' item(s) in it' : '') + '? It also disappears from your phone. This can’t be undone.')) return;
+          try { await deleteAll(topicContents(t).concat([{ id: t.id, kind: 'topic' }])); d.close(); location.hash = '#/c/' + courseId + '/notebook'; }
+          catch (x) { toast(x.message); }
+        } }, 'Delete topic'),
+      });
+    }
 
     async function addSubject() {
       var title = (prompt('Name of the new subject (e.g. Day 1 or Module 2):') || '').trim(); if (!title) return;
@@ -787,6 +902,7 @@
       try {
         var id = uuid(), now = new Date().toISOString();
         await saveItem(courseId, id, 'topic', { subjectId: s.id, title: title.slice(0, 80), keywords: [], orderIndex: n, createdAt: now, updatedAt: now });
+        openSubjects.add(s.id);
         location.hash = '#/c/' + courseId + '/notebook/' + id;
       } catch (x) { toast(x.message); }
     }
@@ -823,6 +939,7 @@
       return h('div', null,
         h('div', { class: 'nb-head' }, h('a', { class: 'back', href: '#/c/' + courseId + '/notebook', 'aria-label': 'All topics' }, '←'),
           h('div', { class: 'nb-title' }, h('h2', null, t.title), (t.keywords || []).length ? h('div', null, t.keywords.map(function (k) { return h('span', { class: 'pill' }, '#' + k); })) : null),
+          h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Rename, tags or delete this topic', onclick: function () { editTopic(t); } }, '⋯'),
           addMenu(t)),
         h('div', { class: 'nb-tools' }, search, chips),
         list);
@@ -836,8 +953,9 @@
         var u = safeUrl(x.url);
         return h('div', { class: 'nb-card' }, h('span', { class: 'ico' }, '🔗'),
           h('div', { class: 'grow' }, u ? h('a', { href: u, target: '_blank', rel: 'noopener', class: 't' }, x.title || u) : h('span', { class: 't' }, x.title),
-            h('span', { class: 'm' }, [x.area, u ? new URL(u).hostname : ''].filter(Boolean).join(' · ')), x.note ? h('span', { class: 'm' }, x.note) : null),
-          del(x, 'link'));
+            h('span', { class: 'm' }, [x.area, u ? new URL(u).hostname : ''].filter(Boolean).join(' · ')), x.note ? h('span', { class: 'm' }, x.note) : null,
+            (x.keywords || []).length ? h('span', null, x.keywords.map(function (k) { return h('span', { class: 'pill' }, '#' + k); })) : null),
+          edit(function () { linkForm(topic, x); }), del(x, 'link'));
       }
       if (i.kind === 'task') {
         var box = h('input', { type: 'checkbox', 'aria-label': 'Done: ' + x.title });
@@ -861,7 +979,7 @@
         body,
         h('div', { class: 'grow' }, h('span', { class: 't' }, label), h('span', { class: 'm' }, [a.fileName !== label ? a.fileName : '', a.fileSize ? Math.max(1, Math.round(a.fileSize / 1024)) + ' KB' : '', !a.blob ? 'on the phone only' : ''].filter(Boolean).join(' · ')),
           (a.keywords || []).length ? h('span', null, a.keywords.map(function (k) { return h('span', { class: 'pill' }, '#' + k); })) : null),
-        del(a, 'attachment'));
+        h('div', { class: 'nb-row-actions' }, edit(function () { fileDetails(a); }), del(a, 'attachment')));
       async function load() {
         try {
           var url = await attachmentUrl(a);
@@ -878,6 +996,45 @@
       return el;
     }
 
+    function edit(fn) {
+      return h('button', { class: 'btn plain small del', type: 'button', 'aria-label': 'Edit details', onclick: function (e) { e.preventDefault(); e.stopPropagation(); fn(); } }, '✎');
+    }
+    function fileDetails(a) {
+      formDialog({
+        title: 'Details',
+        fields: [
+          { key: 'name', label: 'Name', value: stripExt(a.fileName), placeholder: stripExt(a.fileName), max: '100' },
+          { key: 'tags', label: '#Tags (at least one, separate with commas)', value: tagsText(a.keywords), required: true },
+          { key: 'caption', label: 'Caption (optional)', value: a.caption || '', placeholder: 'What is this?', multiline: true, max: '500' },
+        ],
+        onSubmit: async function (v) {
+          var tags = tagsFrom(v.tags); if (!tags.length) throw new Error('Add at least one tag so you can find this later.');
+          await saveItem(courseId, a.id, 'attachment', Object.assign({}, a, { id: undefined, fileName: withExt(v.name, a.fileName), keywords: tags, caption: v.caption }));
+          reopen();
+        },
+      });
+    }
+    function linkForm(t, x) {
+      formDialog({
+        title: x ? 'Edit link' : 'Add a link',
+        fields: [
+          { key: 'url', label: 'Web address', value: x ? x.url : '', placeholder: 'https://…', type: 'url', required: true, max: '2000' },
+          { key: 'title', label: 'Title', value: x ? x.title : '', placeholder: 'What is it?', max: '120' },
+          { key: 'area', label: 'Area (optional)', value: x ? x.area : '', placeholder: 'e.g. Case study', max: '60' },
+          { key: 'tags', label: '#Tags (at least one, separate with commas)', value: x ? tagsText(x.keywords) : tagsText((t.keywords || []).slice(0, 1)), required: true },
+          { key: 'note', label: 'Note (optional)', value: x ? x.note : '', placeholder: 'Why is it useful?', multiline: true, max: '1000' },
+        ],
+        onSubmit: async function (v) {
+          var url = safeUrl(/^https?:\/\//i.test(v.url) ? v.url : 'https://' + v.url);
+          if (!url) throw new Error('That doesn’t look like a web link. Copy the full link, starting with https://');
+          var tags = tagsFrom(v.tags); if (!tags.length) throw new Error('Add at least one tag so you can find this later.');
+          var now = new Date().toISOString();
+          await saveItem(courseId, x ? x.id : uuid(), 'link', { topicId: t.id, url: url, title: (v.title || new URL(url).hostname).slice(0, 120), area: v.area, keywords: tags, note: v.note, createdAt: x ? x.createdAt : now, updatedAt: now });
+          reopen();
+        },
+      });
+    }
+
     function del(x, kind) {
       return h('button', { class: 'btn plain small del', type: 'button', 'aria-label': 'Delete', onclick: async function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -891,16 +1048,26 @@
       var fileIn = h('input', { type: 'file', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
       fileIn.addEventListener('change', async function () {
         var files = Array.prototype.slice.call(fileIn.files || []); fileIn.value = ''; if (!files.length) return;
-        var tag = (prompt('A tag for ' + (files.length > 1 ? 'these files' : files[0].name) + ' (so you can find it later):', (t.keywords || [])[0] || t.title) || '').trim();
-        if (!tag) return;
-        toast('Locking and uploading ' + files.length + ' file(s)…');
-        try { for (var i = 0; i < files.length; i++) await uploadAttachment(courseId, t, files[i], tag.slice(0, 30), ''); reopen(); }
-        catch (x) { toast(x.message); reopen(); }
+        var one = files.length === 1;
+        var what = function (f) { return /^image\//.test(f.type) ? 'photo' : /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'recording' : 'file'; };
+        formDialog({
+          title: one ? 'Add ' + what(files[0]) : 'Add ' + files.length + ' files',
+          intro: files.map(function (f) { return f.name + ' (' + Math.max(1, Math.round(f.size / 1024)) + ' KB)'; }).join(', '),
+          fields: [].concat(
+            one ? [{ key: 'name', label: 'Name (optional)', placeholder: stripExt(files[0].name), hint: 'Leave empty to keep the file’s own name.', max: '100' }] : [],
+            [{ key: 'tags', label: '#Tags (at least one, separate with commas)', value: tagsText((t.keywords || []).slice(0, 1)), placeholder: 'e.g. lecture, week 1', required: true },
+             { key: 'caption', label: 'Caption (optional)', placeholder: 'What is this?', multiline: true, max: '500' }]),
+          onSubmit: async function (v) {
+            var tags = tagsFrom(v.tags); if (!tags.length) throw new Error('Add at least one tag so you can find this later.');
+            for (var i = 0; i < files.length; i++) await uploadAttachment(courseId, t, files[i], { name: one ? v.name : '', tags: tags, caption: v.caption });
+            reopen();
+          },
+        });
       });
       var menu = h('div', { class: 'nb-menu', hidden: true, role: 'menu' },
         item('📝 Note', function () { editNote(null); }),
         item('🖼️ Photo, video, recording or file', function () { fileIn.click(); }),
-        item('🔗 Link', addLink),
+        item('🔗 Link', function () { linkForm(t, null); }),
         item('✅ Task', addTask),
         item('⏰ Reminder', addReminder));
       function item(label, fn) { return h('button', { type: 'button', role: 'menuitem', onclick: function () { menu.hidden = true; fn(); } }, label); }
@@ -908,13 +1075,6 @@
       document.addEventListener('click', function () { menu.hidden = true; });
       return h('div', { class: 'nb-add' }, btn, menu, fileIn);
 
-      async function addLink() {
-        var raw = (prompt('Paste the link (starting with https://):') || '').trim(); if (!raw) return;
-        var url = safeUrl(raw); if (!url) return toast('That doesn’t look like a web link. Copy the full link, starting with https://');
-        var title = (prompt('A name for this link:', '') || '').trim() || new URL(url).hostname;
-        try { var now = new Date().toISOString(); await saveItem(courseId, uuid(), 'link', { topicId: t.id, url: url, title: title.slice(0, 120), area: '', keywords: [((t.keywords || [])[0] || 'link').slice(0, 30)], note: '', createdAt: now, updatedAt: now }); reopen(); }
-        catch (x) { toast(x.message); }
-      }
       async function addTask() {
         var title = (prompt('What needs doing?') || '').trim(); if (!title) return;
         try { await saveItem(courseId, uuid(), 'task', { parentType: 'topic', parentId: t.id, title: title.slice(0, 200), done: false, dueDate: null, reminderAt: null, createdAt: new Date().toISOString() }); reopen(); }
