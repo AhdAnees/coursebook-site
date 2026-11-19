@@ -304,17 +304,31 @@
       } catch (x) { setError(err, x); busy(jbtn, false, ['Join', '']); }
     } }, code, jbtn);
 
+    // Search your courses (title, place or kind), like the app.
+    function courseCard(c) {
+      return h('a', { class: 'course', href: '#/c/' + c.id, style: '--c:' + (/^#[0-9a-f]{3,8}$/i.test(c.color || '') ? c.color : '') },
+        h('div', { class: 'stripe' }),
+        h('div', { class: 'in' },
+          h('div', null, h('span', { class: 'pill' }, TYPE[c.type] || 'Course'), c.role === 'owner' ? h('span', { class: 'pill' }, 'Owner') : null),
+          h('h3', null, c.title),
+          h('p', null, [c.location, [fmtDate(c.start_date), c.end_date ? fmtDate(c.end_date) : ''].filter(Boolean).join(' – ')].filter(Boolean).join(' · '))));
+    }
+    var courseGrid = h('div', { class: 'courses' });
+    var courseSearch = h('input', { type: 'search', class: 'page-search', placeholder: 'Search your courses', 'aria-label': 'Search your courses' });
+    function drawCourses() {
+      var q = courseSearch.value.trim().toLowerCase();
+      var shown = courses.filter(function (c) { return !q || [c.title, c.location, TYPE[c.type] || ''].some(function (x) { return String(x || '').toLowerCase().indexOf(q) >= 0; }); });
+      courseGrid.replaceChildren.apply(courseGrid, shown.length ? shown.map(courseCard) : [h('p', { class: 'empty' }, 'No course matches that search.')]);
+    }
+    courseSearch.addEventListener('input', drawCourses);
+    drawCourses();
+
     show(topBar(), h('main', { class: 'page' },
       h('h1', null, 'My courses'),
-      h('p', { class: 'sub' }, 'Open a course to see its Library and chat. Your private notebook stays in the phone app for now.'),
-      courses.length ? h('div', { class: 'courses' }, courses.map(function (c) {
-        return h('a', { class: 'course', href: '#/c/' + c.id, style: '--c:' + (/^#[0-9a-f]{3,8}$/i.test(c.color || '') ? c.color : '') },
-          h('div', { class: 'stripe' }),
-          h('div', { class: 'in' },
-            h('div', null, h('span', { class: 'pill' }, TYPE[c.type] || 'Course'), c.role === 'owner' ? h('span', { class: 'pill' }, 'Owner') : null),
-            h('h3', null, c.title),
-            h('p', null, [c.location, [fmtDate(c.start_date), c.end_date ? fmtDate(c.end_date) : ''].filter(Boolean).join(' – ')].filter(Boolean).join(' · '))));
-      })) : h('div', { class: 'card empty' }, h('p', null, 'You’re not in any course yet. Join one with the invite code from your trainer.')),
+      h('p', { class: 'sub' }, 'Open a course to see your notebook, the class Library and chat.'),
+      courses.length > 1 ? courseSearch : null,
+      courses.length ? courseGrid : null,
+      courses.length ? null : h('div', { class: 'card empty' }, h('p', null, 'You’re not in any course yet. Join one with the invite code from your trainer.')),
       requests.length ? h('p', { class: 'note-line' }, 'Waiting for approval: ', requests.map(function (q) { return q.title; }).join(', ')) : null,
       h('div', { class: 'card', style: 'margin-top:20px' }, h('h2', null, 'Join a course'), join, err)));
   }
@@ -815,14 +829,49 @@
     function inTopic(list, t) { return list.filter(function (x) { return x.topicId === t.id; }); }
     function countFor(t) { return inTopic(nb.note, t).length + inTopic(nb.link, t).length + inTopic(nb.attachment, t).length + nb.task.filter(function (k) { return k.parentType === 'topic' && k.parentId === t.id; }).length + inTopic(nb.reminder, t).length; }
 
-    var side = h('nav', { class: 'nb-side', 'aria-label': 'Subjects and topics' },
-      nb.subjects.length ? nb.subjects.map(function (s) {
+    // Search the notebook: subject and topic names, and everything inside topics.
+    function topicText(t) {
+      var inT = function (list) { return list.filter(function (x) { return x.topicId === t.id; }); };
+      return [].concat(
+        inT(nb.note).map(function (x) { return x.content; }),
+        inT(nb.link).map(function (x) { return [x.title, x.url, x.area, x.note].concat(x.keywords || []).join(' '); }),
+        inT(nb.attachment).map(function (x) { return [x.fileName, x.caption].concat(x.keywords || []).join(' '); }),
+        inT(nb.reminder).map(function (x) { return x.title; }),
+        nb.task.filter(function (k) { return k.parentType === 'topic' && k.parentId === t.id; }).map(function (k) { return k.title; }));
+    }
+    function matchesIn(t, q) {
+      return topicText(t).filter(function (txt) { return String(txt || '').toLowerCase().indexOf(q) >= 0; }).length;
+    }
+    var nbSearch = h('input', { type: 'search', class: 'nb-search', placeholder: 'Search subjects and topics', 'aria-label': 'Search subjects and topics' });
+    var subjectList = h('div', { class: 'nb-subjects' });
+    function drawSubjects() {
+      var q = nbSearch.value.trim().toLowerCase();
+      var parts = nb.subjects.map(function (s) {
         var ts = nb.topics.filter(function (t) { return t.subjectId === s.id; });
+        var hits = null;
+        if (q) {
+          var subjectHit = String(s.title).toLowerCase().indexOf(q) >= 0;
+          hits = new Map();
+          ts.forEach(function (t) {
+            var n = matchesIn(t, q) + ((String(t.title) + ' ' + (t.keywords || []).join(' ')).toLowerCase().indexOf(q) >= 0 ? 1 : 0);
+            if (n || subjectHit) hits.set(t.id, n);
+          });
+          if (!subjectHit && !hits.size) return null;
+          ts = ts.filter(function (t) { return hits.has(t.id); });
+        }
+        return subjectRow(s, ts, hits);
+      }).filter(Boolean);
+      subjectList.replaceChildren.apply(subjectList, parts.length ? parts
+        : [h('p', { class: 'note-line', style: 'padding:8px' }, q ? 'Nothing in this notebook matches “' + nbSearch.value.trim() + '”.' : 'No subjects yet.')]);
+    }
+    nbSearch.addEventListener('input', drawSubjects);
+
+    function subjectRow(s, ts, hits) {
         if (topic && topic.subjectId === s.id) openSubjects.add(s.id); // the subject of the open topic stays open
-        var open = openSubjects.has(s.id);
+        var open = !!hits || openSubjects.has(s.id);
         var list = h('div', { class: 'nb-topics', id: 'topics-' + s.id, hidden: !open },
           ts.length ? ts.map(function (t) {
-            return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, String(countFor(t))));
+            return h('a', { class: 'nb-topic', href: '#/c/' + courseId + '/notebook/' + t.id, 'aria-current': topic && topic.id === t.id ? 'true' : null }, t.title, h('span', { class: 'm' }, hits ? (hits.get(t.id) ? hits.get(t.id) + (hits.get(t.id) === 1 ? ' match' : ' matches') : '') : String(countFor(t))));
           }) : h('p', { class: 'note-line', style: 'padding:4px 10px 4px 26px;margin:0' }, 'No topics yet. Use ＋ to add one.'));
         var toggle = h('button', { class: 'nb-sh-toggle', type: 'button', 'aria-expanded': String(open), 'aria-controls': 'topics-' + s.id, onclick: function () {
           var nowOpen = list.hidden;
@@ -838,11 +887,16 @@
             h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Add a topic to ' + s.title, onclick: function () { addTopic(s, ts.length); } }, '＋'),
             h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Rename or delete ' + s.title, onclick: function () { editSubject(s); } }, '⋯')),
           list);
-      }) : h('p', { class: 'note-line', style: 'padding:8px' }, 'No subjects yet.'),
+    }
+
+    var side = h('nav', { class: 'nb-side', 'aria-label': 'Subjects and topics' },
+      nb.subjects.length ? nbSearch : null,
+      subjectList,
       h('button', { class: 'btn soft small', type: 'button', style: 'margin:8px', onclick: addSubject }, '＋ New subject'),
       h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'),
       nb.unreadable ? h('p', { class: 'note-line', style: 'padding:8px' }, nb.unreadable + ' item(s) couldn’t be unlocked with this key.') : null);
 
+    drawSubjects();
     var main = h('div', { class: 'nb-main' });
     if (!topic) main.appendChild(h('div', { class: 'pick' }, nb.subjects.length ? 'Pick a topic to see what’s in it.' : 'Start with a subject (like a module or day), then add topics.'));
     else main.appendChild(topicPage(topic));
