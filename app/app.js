@@ -703,12 +703,12 @@
 
   var KEY_AAD = 'liyaa-notes-key', ITER = 210000, enc = new TextEncoder(), dec = new TextDecoder();
   var SUBJECT_COLORS = ['#4F6DF5', '#E5484D', '#30A46C', '#F76B15', '#8E4EC6', '#0091FF', '#D6409F', '#12A594'];
-  var notesKey = null; // CryptoKey for AES-GCM
+  var notesKey = null, notesRaw = null; // CryptoKey for AES-GCM, and its bytes (to add unlock options)
   var NK_STORE = 'liyaa.notesKey';
 
   function b64(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s); }
   function unb64(s) { var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
-  function forgetNotesKey() { notesKey = null; try { sessionStorage.removeItem(NK_STORE); } catch (e) { /* storage unavailable */ } }
+  function forgetNotesKey() { notesKey = null; notesRaw = null; try { sessionStorage.removeItem(NK_STORE); } catch (e) { /* storage unavailable */ } }
   async function kekFrom(password, salt, iterations) {
     var base = await crypto.subtle.importKey('raw', enc.encode(password.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -724,7 +724,7 @@
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(p[1]), additionalData: enc.encode(aad) }, key, unb64(p[2])));
   }
   async function useRawKey(raw) {
-    notesKey = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    notesKey = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); notesRaw = new Uint8Array(raw);
     try { sessionStorage.setItem(NK_STORE, state.user.id + ':' + b64(raw)); } catch (e) { /* storage unavailable */ }
   }
   async function restoreNotesKey() {
@@ -735,22 +735,166 @@
     } catch (e) { /* storage unavailable */ }
     return false;
   }
-  async function wrappedKeyRow() {
-    var r = await sb.from('notes_keys').select('salt, iterations, wrapped_key').eq('user_id', state.user.id).maybeSingle(); fail(r.error);
+  // ---- Ways to unlock: the main row (notes password, or recovery code for people who set up on the web) and
+  // notes_key_wraps (passkeys through the WebAuthn PRF extension, and recovery codes for notes-password users).
+
+  var CODE_ABC = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  function newRecoveryCode() {
+    var b = crypto.getRandomValues(new Uint8Array(20)), s = '';
+    for (var i = 0; i < 20; i++) { s += CODE_ABC[b[i] & 31]; if (i % 4 === 3 && i < 19) s += '-'; }
+    return s; // 100 random bits, e.g. K7QH-2M9X-4TPA-8WRC-0D3N
+  }
+  /** "k7qh 2m9x…" → "K7QH-2M9X-…" when the text is a recovery code, else null. */
+  function asRecoveryCode(text) {
+    var s = String(text || '').toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+    if (s.length !== 20) return null;
+    for (var i = 0; i < 20; i++) if (CODE_ABC.indexOf(s[i]) < 0) return null;
+    return s.match(/.{4}/g).join('-');
+  }
+  async function keyWraps() {
+    var r = await sb.from('notes_key_wraps').select('id, kind, credential_id, salt, iterations, wrapped_key, label, created_at').eq('user_id', state.user.id); fail(r.error);
+    return r.data || [];
+  }
+  async function baseKeyRow() {
+    var r = await sb.from('notes_keys').select('salt, iterations, wrapped_key, secret_kind').eq('user_id', state.user.id).maybeSingle(); fail(r.error);
     return r.data;
   }
-  async function unlockNotes(password) {
-    var w = await wrappedKeyRow(); if (!w) throw new Error('Notes sync isn’t set up yet.');
-    var kek = await kekFrom(password, unb64(w.salt), w.iterations), raw;
-    try { raw = await unseal(kek, w.wrapped_key, KEY_AAD); } catch (e) { throw new Error('That notes password isn’t right.'); }
+  async function wrapWithSecret(secret) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    return { salt: b64(salt), iterations: ITER, wrapped_key: await seal(await kekFrom(secret, salt, ITER), notesRaw, KEY_AAD) };
+  }
+
+  /** Unlocks with the notes password or a recovery code, whichever was typed. */
+  async function unlockWithSecret(text) {
+    var base = await baseKeyRow(), wraps = await keyWraps();
+    if (!base && !wraps.length) throw new Error('Your notebook isn’t set up yet.');
+    var rows = (base ? [base] : []).concat(wraps.filter(function (w) { return w.kind === 'recovery'; }));
+    var code = asRecoveryCode(text), secrets = code && code !== text ? [code, text] : [text];
+    for (var i = 0; i < rows.length; i++) {
+      for (var j = 0; j < secrets.length; j++) {
+        try { await useRawKey(await unseal(await kekFrom(secrets[j], unb64(rows[i].salt), rows[i].iterations), rows[i].wrapped_key, KEY_AAD)); return; }
+        catch (e) { /* not this one */ }
+      }
+    }
+    throw new Error(code || (base && base.secret_kind === 'recovery') ? 'That recovery code isn’t right. Check each character.' : 'That notes password or recovery code isn’t right.');
+  }
+
+  /** First setup on the web: a new notebook key, locked with the recovery code. */
+  async function setUpWithRecoveryCode(code) {
+    if (await baseKeyRow()) throw new Error('Your notebook is already set up. Unlock it instead.');
+    var raw = crypto.getRandomValues(new Uint8Array(32));
+    await useRawKey(raw);
+    var w = await wrapWithSecret(code);
+    var r = await sb.from('notes_keys').insert({ user_id: state.user.id, salt: w.salt, iterations: w.iterations, wrapped_key: w.wrapped_key, secret_kind: 'recovery' });
+    if (r.error) { forgetNotesKey(); fail(r.error); }
+  }
+
+  /** A new recovery code for the unlocked notebook; the old one stops working. */
+  async function replaceRecoveryCode(code) {
+    if (!notesRaw) throw new Error('Unlock your notebook first.');
+    var w = await wrapWithSecret(code), base = await baseKeyRow();
+    if (base && base.secret_kind === 'recovery') {
+      fail((await sb.from('notes_keys').update({ salt: w.salt, iterations: w.iterations, wrapped_key: w.wrapped_key, secret_kind: 'recovery' }).eq('user_id', state.user.id)).error);
+      return;
+    }
+    var ins = await sb.from('notes_key_wraps').insert({ user_id: state.user.id, kind: 'recovery', salt: w.salt, iterations: w.iterations, wrapped_key: w.wrapped_key, label: 'Recovery code' }).select('id').single(); fail(ins.error);
+    fail((await sb.from('notes_key_wraps').delete().eq('user_id', state.user.id).eq('kind', 'recovery').neq('id', ins.data.id)).error);
+  }
+  async function hasRecoveryCode(base, wraps) {
+    return (base && base.secret_kind === 'recovery') || wraps.some(function (w) { return w.kind === 'recovery'; });
+  }
+
+  // Passkeys: the authenticator turns a per-passkey salt into a secret (PRF); HKDF makes it the wrapping key.
+  function rpId() { return location.hostname.replace(/^www\./, ''); }
+  function b64url(bytes) { return b64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64url(s) { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return unb64(s); }
+  var NO_PRF = 'This browser can’t unlock notes with a passkey. Use your recovery code here, or try Safari on iPhone (iOS 18 or later) or Chrome.';
+  async function passkeysPossible() {
+    if (!window.PublicKeyCredential || !navigator.credentials || !window.isSecureContext) return false;
+    try {
+      if (PublicKeyCredential.getClientCapabilities) { var c = await PublicKeyCredential.getClientCapabilities(); if (c && c['extension:prf'] === false) return false; }
+    } catch (e) { /* unknown: let them try */ }
+    return true;
+  }
+  async function kekFromPrf(out) {
+    var base = await crypto.subtle.importKey('raw', out, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode('liyaa-notes-passkey-v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  function passkeyError(e) {
+    var n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'AbortError') return new Error('The passkey was cancelled or not found on this device.');
+    if (n === 'InvalidStateError') return new Error('This device already has a passkey for your notebook.');
+    if (n === 'SecurityError') return new Error('Passkeys work only on liyaanote.app.');
+    if (n === 'NotSupportedError') return new Error(NO_PRF);
+    return e instanceof Error ? e : new Error(String(e));
+  }
+  function deviceLabel() {
+    var u = navigator.userAgent;
+    return /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android phone' : /Macintosh/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'This device';
+  }
+  /** Asks a passkey from the list for its secret. Returns the passkey used and the secret. */
+  async function prfFrom(list) {
+    var evalBy = {};
+    list.forEach(function (x) { evalBy[b64url(x.id)] = { first: x.salt }; });
+    var a;
+    try {
+      a = await navigator.credentials.get({ publicKey: {
+        rpId: rpId(), challenge: crypto.getRandomValues(new Uint8Array(32)), userVerification: 'required', timeout: 120000,
+        allowCredentials: list.map(function (x) { return { type: 'public-key', id: x.id }; }),
+        extensions: { prf: { evalByCredential: evalBy } } } });
+    } catch (e) { throw passkeyError(e); }
+    var r = a && a.getClientExtensionResults().prf;
+    if (!r || !r.results || !r.results.first) throw new Error(NO_PRF);
+    return { id: b64url(a.rawId), out: r.results.first };
+  }
+  async function addPasskey() {
+    if (!notesRaw) throw new Error('Unlock your notebook first.');
+    var existing = (await keyWraps()).filter(function (w) { return w.kind === 'passkey'; });
+    var salt = crypto.getRandomValues(new Uint8Array(32)), meta = state.user.user_metadata || {}, cred;
+    try {
+      cred = await navigator.credentials.create({ publicKey: {
+        rp: { id: rpId(), name: 'Liyaa Note' },
+        user: { id: enc.encode(state.user.id), name: state.user.email || 'Liyaa Note', displayName: meta.display_name || state.user.email || 'Liyaa Note' },
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+        excludeCredentials: existing.map(function (w) { return { type: 'public-key', id: unb64url(w.credential_id) }; }),
+        extensions: { prf: { eval: { first: salt } } }, timeout: 120000 } });
+    } catch (e) { throw passkeyError(e); }
+    var ext = (cred && cred.getClientExtensionResults().prf) || {};
+    var out = ext.results && ext.results.first;
+    if (!out && !ext.enabled) throw new Error(NO_PRF + ' (You can delete the “Liyaa Note” passkey that was just saved.)');
+    if (!out) out = (await prfFrom([{ id: new Uint8Array(cred.rawId), salt: salt }])).out; // some devices give the secret only when signing in
+    var r = await sb.from('notes_key_wraps').insert({ user_id: state.user.id, kind: 'passkey', credential_id: b64url(cred.rawId), salt: b64(salt), wrapped_key: await seal(await kekFromPrf(out), notesRaw, KEY_AAD), label: deviceLabel() });
+    fail(r.error);
+  }
+  async function unlockWithPasskey(wraps) {
+    var keys = wraps.filter(function (w) { return w.kind === 'passkey'; });
+    var res = await prfFrom(keys.map(function (w) { return { id: unb64url(w.credential_id), salt: unb64(w.salt) }; }));
+    var w = keys.filter(function (k) { return k.credential_id === res.id; })[0];
+    if (!w) throw new Error('That passkey isn’t linked to your notebook.');
+    var raw;
+    try { raw = await unseal(await kekFromPrf(res.out), w.wrapped_key, KEY_AAD); } catch (e) { throw new Error('This passkey couldn’t unlock your notebook. Use your recovery code.'); }
     await useRawKey(raw);
   }
-  async function setUpNotes(password) {
-    if (await wrappedKeyRow()) throw new Error('Notes sync is already set up. Enter your notes password instead.');
-    var raw = crypto.getRandomValues(new Uint8Array(32)), salt = crypto.getRandomValues(new Uint8Array(16));
-    var wrapped = await seal(await kekFrom(password, salt, ITER), raw, KEY_AAD);
-    var r = await sb.from('notes_keys').insert({ user_id: state.user.id, salt: b64(salt), iterations: ITER, wrapped_key: wrapped }); fail(r.error);
-    await useRawKey(raw);
+
+  /** Last resort: deletes the synced notebook (items, files and keys) after checking the sign-in password. */
+  async function eraseNotebook(password) {
+    var check = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'liyaa.verify' } });
+    var s = await check.auth.signInWithPassword({ email: state.user.email, password: password });
+    if (s.error) throw new Error('That sign-in password isn’t right.');
+    await check.auth.signOut({ scope: 'local' }).catch(function () {});
+    var uid = state.user.id;
+    for (var round = 0; round < 200; round++) {
+      var l = await sb.storage.from('notes-files').list(uid, { limit: 100 }); fail(l.error);
+      var names = (l.data || []).map(function (f) { return uid + '/' + f.name; });
+      if (!names.length) break;
+      fail((await sb.storage.from('notes-files').remove(names)).error);
+    }
+    fail((await sb.from('notes_sync').delete().eq('user_id', uid)).error);
+    fail((await sb.from('notes_key_wraps').delete().eq('user_id', uid)).error);
+    fail((await sb.from('notes_keys').delete().eq('user_id', uid)).error);
+    forgetNotesKey();
   }
   async function encryptItem(id, kind, data) { return seal(notesKey, enc.encode(JSON.stringify(data)), id + ':' + kind); }
   async function decryptItem(id, kind, sealed) { return JSON.parse(dec.decode(await unseal(notesKey, sealed, id + ':' + kind))); }
@@ -874,39 +1018,185 @@
     show.apply(null, courseFrame(ctx, 'notebook', panel));
     try {
       if (!(await restoreNotesKey())) {
-        var w = await wrappedKeyRow();
-        return panel.replaceChildren(notesGate(ctx, !!w));
+        var base = await baseKeyRow(), wraps = await keyWraps();
+        return panel.replaceChildren(base || wraps.length ? unlockGate(ctx, base, wraps, await passkeysPossible()) : setupGate(ctx));
       }
       var nb = await loadNotebook(ctx.course.id);
       panel.replaceChildren(notebookBody(ctx, nb, topicId));
+      unlockTip(ctx).then(function (t) { if (t && panel.isConnected) panel.prepend(t); }).catch(function () {});
     } catch (x) { panel.replaceChildren(h('p', { class: 'empty error' }, x.message)); }
   }
 
-  /** Unlock form, or first-time setup for people without the phone app. */
-  function notesGate(ctx, isSetUp) {
-    var pw = h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Notes password' });
-    var pw2 = isSetUp ? null : h('input', { type: 'password', autocomplete: 'off', required: true, 'aria-label': 'Type it again' });
+  /** Shows a recovery code with Copy and Save, and asks for its last 4 characters before going on. */
+  function recoveryCodeStep(code, buttonLabel, onConfirmed) {
     var err = errorBox();
-    var label = isSetUp ? 'Unlock' : 'Turn on notes';
-    var btn = h('button', { class: 'btn', type: 'submit' }, label);
+    var last = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', maxlength: '4', required: true, 'aria-label': 'Last 4 characters', style: 'max-width:140px;text-transform:uppercase;letter-spacing:.15em' });
+    var copyBtn = h('button', { class: 'btn soft small', type: 'button', onclick: async function () {
+      try { await navigator.clipboard.writeText(code); copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1600); }
+      catch (e) { prompt('Copy your recovery code:', code); }
+    } }, 'Copy');
+    var saveBtn = h('button', { class: 'btn soft small', type: 'button', onclick: function () {
+      var text = 'Liyaa Note recovery code\n\n' + code + '\n\nUse it to unlock your notebook if you lose your phone or computer.\nKeep it private: anyone with this code and your account can read your notes.\n';
+      var a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: 'Liyaa-Note-recovery-code.txt' });
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    } }, 'Save as file');
+    var go = h('button', { class: 'btn', type: 'submit' }, buttonLabel);
+    return h('form', { onsubmit: async function (e) {
+      e.preventDefault(); setError(err, null);
+      if (last.value.trim().toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1') !== code.slice(-4)) return setError(err, new Error('That doesn’t match the end of your code. Check what you saved.'));
+      busy(go, true, [buttonLabel, 'Saving…']);
+      try { await onConfirmed(); } catch (x) { setError(err, x); busy(go, false, [buttonLabel, '']); }
+    } },
+      h('div', { class: 'rc-code', 'aria-label': 'Recovery code' }, code),
+      h('div', { class: 'nb-actions', style: 'margin:0 0 10px' }, copyBtn, saveBtn),
+      h('p', { class: 'note-line', style: 'margin-top:0' }, 'Take a screenshot, write it down or keep it in a password manager. It’s the only way back in if you lose your devices. Nobody, not even Liyaa Note, can recover your notes without it.'),
+      h('label', { class: 'field' }, h('span', null, 'To check you saved it, type its last 4 characters'), last),
+      go, err);
+  }
+
+  /** Offers a passkey (Face ID, fingerprint or device PIN) for the unlocked notebook. */
+  function passkeyStep(onDone, skipLabel) {
+    var err = errorBox();
+    var add = h('button', { class: 'btn', type: 'button', onclick: async function () {
+      setError(err, null); busy(add, true, ['Use Face ID or fingerprint', 'Waiting for your device…']);
+      try { await addPasskey(); unlockInfo = null; toast('Passkey added. Next time, unlock with Face ID, fingerprint or your device PIN.'); onDone(); }
+      catch (x) { setError(err, x); busy(add, false, ['Use Face ID or fingerprint', '']); }
+    } }, 'Use Face ID or fingerprint');
+    return h('div', null,
+      h('p', { class: 'sub' }, 'Unlock with Face ID, your fingerprint or your device PIN, with nothing to type. Your iPhone keeps the passkey in iCloud Keychain (Android: Google Password Manager), so a new phone signed in to the same account can unlock too.'),
+      h('div', { class: 'nb-actions' }, add, skipLabel ? h('button', { class: 'btn plain', type: 'button', onclick: onDone }, skipLabel) : null),
+      err);
+  }
+
+  /** First time on the web: a recovery code, then (if the device can) a passkey. */
+  function setupGate(ctx) {
+    var box = h('div', { class: 'gate' });
+    function step(title, sub, body) { box.replaceChildren.apply(box, [h('h2', null, title), sub ? h('p', { class: 'sub' }, sub) : null, body].filter(Boolean)); }
+    function intro() {
+      step('Start your notebook', 'Keep notes, photos, files, links and tasks for this course, locked so only you can read them.',
+        h('div', null,
+          h('button', { class: 'btn', type: 'button', onclick: showCode }, 'Set up my notebook'),
+          h('p', { class: 'note-line' }, 'Using the Android app? Turn on Notes on the web there first (Profile & Settings), then come back and unlock with that notes password.')));
+    }
+    function showCode() {
+      var code = newRecoveryCode();
+      step('Save your recovery code', 'This code unlocks your notebook on any device.',
+        recoveryCodeStep(code, 'I’ve saved it', async function () {
+          await setUpWithRecoveryCode(code); unlockInfo = null;
+          if (await passkeysPossible()) step('Unlock faster next time', null, passkeyStep(function () { viewNotebook(ctx); }, 'Not now'));
+          else viewNotebook(ctx);
+        }));
+    }
+    intro();
+    return box;
+  }
+
+  /** Unlock: passkey first if there is one, else the notes password or recovery code. */
+  function unlockGate(ctx, base, wraps, canPasskey) {
+    var hasPasskey = canPasskey && wraps.some(function (w) { return w.kind === 'passkey'; });
+    var recoveryOnly = base && base.secret_kind === 'recovery';
+    var pw = h('input', { type: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', required: true });
+    var err = errorBox(), pkErr = errorBox();
+    var label = 'Unlock', btn = h('button', { class: hasPasskey ? 'btn soft' : 'btn', type: 'submit' }, label);
     var form = h('form', { onsubmit: async function (e) {
       e.preventDefault(); setError(err, null);
-      if (!isSetUp && pw.value.length < 8) return setError(err, new Error('Use at least 8 characters.'));
-      if (!isSetUp && pw.value !== pw2.value) return setError(err, new Error('The two passwords don’t match.'));
       busy(btn, true, [label, 'Unlocking…']);
-      try { isSetUp ? await unlockNotes(pw.value) : await setUpNotes(pw.value); viewNotebook(ctx); }
+      try { await unlockWithSecret(pw.value); unlockInfo = null; viewNotebook(ctx); }
       catch (x) { setError(err, x); busy(btn, false, [label, '']); }
     } },
-      h('label', { class: 'field' }, h('span', null, isSetUp ? 'Notes password' : 'Choose a notes password (8 or more characters)'), pw),
-      pw2 ? h('label', { class: 'field' }, h('span', null, 'Type it again'), pw2) : null,
+      h('label', { class: 'field' }, h('span', null, recoveryOnly ? 'Recovery code' : 'Notes password or recovery code'), pw),
       btn, err);
+    var pk = hasPasskey ? h('button', { class: 'btn big-unlock', type: 'button', onclick: async function () {
+      setError(pkErr, null); busy(pk, true, ['🔐 Unlock with Face ID or fingerprint', 'Waiting for your device…']);
+      try { await unlockWithPasskey(wraps); viewNotebook(ctx); }
+      catch (x) { setError(pkErr, x); busy(pk, false, ['🔐 Unlock with Face ID or fingerprint', '']); }
+    } }, '🔐 Unlock with Face ID or fingerprint') : null;
     return h('div', { class: 'gate' },
-      h('h2', null, isSetUp ? 'Unlock your notebook' : 'Start your notebook'),
-      h('p', { class: 'sub' }, isSetUp
-        ? 'Your notebook is locked with your notes password, so only you can read it.'
-        : 'Choose a notes password to keep your notes, photos, files, links and tasks here, locked so only you can read them. Already using the phone app? Turn on Notes on the web there (Profile & Settings) and use the same notes password.'),
-      isSetUp ? null : h('p', { class: 'note-line' }, 'If you forget the notes password, your synced notebook can’t be recovered. Nobody, not even Liyaa Note, can open it.'),
-      form);
+      h('h2', null, 'Unlock your notebook'),
+      h('p', { class: 'sub' }, 'Your notebook is locked so only you can read it.'),
+      pk, pk ? pkErr : null,
+      pk ? h('p', { class: 'or-line' }, h('span', null, 'or')) : null,
+      form,
+      h('p', { class: 'note-line', style: 'margin-top:18px' }, 'Lost your recovery code and forgot your notes password? ',
+        h('a', { href: '#', onclick: function (e) { e.preventDefault(); eraseDialog(ctx); } }, 'Erase and start over')));
+  }
+
+  function eraseDialog(ctx) {
+    var pw = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+    var word = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', required: true, placeholder: 'ERASE' });
+    var err = errorBox(), go = h('button', { class: 'btn danger', type: 'submit' }, 'Erase my notebook');
+    var d = h('dialog', { 'aria-label': 'Erase and start over' },
+      h('div', { class: 'dh' }, h('span', null, 'Erase and start over'), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
+      h('form', { class: 'db', style: 'white-space:normal', onsubmit: async function (e) {
+        e.preventDefault(); setError(err, null);
+        if (word.value.trim().toUpperCase() !== 'ERASE') return setError(err, new Error('Type ERASE to confirm.'));
+        busy(go, true, ['Erase my notebook', 'Erasing…']);
+        try { await eraseNotebook(pw.value); unlockInfo = null; d.close(); toast('Your notebook was erased. Set it up again to start fresh.'); viewNotebook(ctx); }
+        catch (x) { setError(err, x); busy(go, false, ['Erase my notebook', '']); }
+      } },
+        h('p', { class: 'warn-box' }, h('b', null, 'This permanently deletes your synced notebook'), ': every subject, topic, note, photo, file, link, task and reminder in all your courses. It can’t be undone, and nobody can bring it back.'),
+        h('p', { class: 'note-line', style: 'margin-top:0' }, 'Using the Android app too? Turn off Notes on the web there first (Profile & Settings). The notes on your phone stay on your phone.'),
+        h('label', { class: 'field' }, h('span', null, 'Your sign-in password'), pw),
+        h('label', { class: 'field' }, h('span', null, 'Type ERASE to confirm'), word),
+        err, h('div', { class: 'nb-actions' }, h('span', { class: 'grow' }), go)));
+    d.addEventListener('close', function () { d.remove(); });
+    document.body.appendChild(d); d.showModal();
+  }
+
+  /** In the open notebook: passkeys, recovery code. */
+  async function unlockOptionsDialog(ctx) {
+    var body = h('div', { class: 'db', style: 'white-space:normal' }, h('p', { class: 'note-line' }, 'Loading…'));
+    var d = h('dialog', { 'aria-label': 'Unlock options' },
+      h('div', { class: 'dh' }, h('span', null, 'Unlock options'), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')), body);
+    d.addEventListener('close', function () { d.remove(); if (d.dataset.changed) { unlockInfo = null; viewNotebook(ctx); } });
+    document.body.appendChild(d); d.showModal();
+
+    async function draw() {
+      var base = await baseKeyRow(), wraps = await keyWraps(), can = await passkeysPossible();
+      var keys = wraps.filter(function (w) { return w.kind === 'passkey'; });
+      var hasCode = await hasRecoveryCode(base, wraps);
+      var list = keys.length ? keys.map(function (k) {
+        var rm = h('button', { class: 'btn plain small', type: 'button', onclick: async function () {
+          if (!confirm('Remove the passkey for ' + (k.label || 'this device') + '? You can still unlock with your recovery code' + (base && base.secret_kind !== 'recovery' ? ' or notes password' : '') + '.')) return;
+          rm.disabled = true;
+          var r = await sb.from('notes_key_wraps').delete().eq('id', k.id);
+          if (r.error) { rm.disabled = false; return toast(friendly(r.error.message)); }
+          d.dataset.changed = '1'; draw();
+        } }, 'Remove');
+        return h('div', { class: 'req' }, h('span', { class: 'av' }, '🔐'), h('div', { class: 'grow' }, h('b', null, k.label || 'Passkey'), h('span', { class: 'm' }, 'Added ' + fmtDate(k.created_at))), rm);
+      }) : [h('p', { class: 'note-line' }, 'No passkeys yet.')];
+      body.replaceChildren(
+        h('h2', null, 'Face ID or fingerprint'),
+        h('div', null, list),
+        can ? passkeyStep(function () { d.dataset.changed = '1'; draw(); }, null) : h('p', { class: 'note-line' }, NO_PRF),
+        h('h2', { style: 'margin-top:20px' }, 'Recovery code'),
+        h('p', { class: 'note-line', style: 'margin-top:0' }, hasCode
+          ? 'You have a recovery code. Lost it? Make a new one: the old code stops working.'
+          : 'You don’t have a recovery code yet. Make one now, so you can get back in if you forget your notes password or lose your devices.'),
+        h('button', { class: hasCode ? 'btn soft' : 'btn', type: 'button', onclick: function () {
+          var code = newRecoveryCode();
+          body.replaceChildren(h('h2', null, 'Your new recovery code'),
+            recoveryCodeStep(code, 'I’ve saved it', async function () { await replaceRecoveryCode(code); d.dataset.changed = '1'; toast('Recovery code saved.'); draw(); }));
+        } }, hasCode ? 'Make a new recovery code' : 'Make a recovery code'));
+    }
+    draw().catch(function (x) { body.replaceChildren(h('p', { class: 'error' }, x.message)); });
+  }
+
+  /** Banner in the notebook when there's no passkey or no recovery code yet. */
+  var unlockInfo = null, unlockTipHidden = false;
+  async function unlockTip(ctx) {
+    if (unlockTipHidden) return null;
+    if (!unlockInfo) {
+      var base = await baseKeyRow(), wraps = await keyWraps();
+      unlockInfo = { code: await hasRecoveryCode(base, wraps), passkey: wraps.some(function (w) { return w.kind === 'passkey'; }), can: await passkeysPossible() };
+    }
+    var missing = !unlockInfo.code ? 'a recovery code' : unlockInfo.can && !unlockInfo.passkey ? 'Face ID or fingerprint unlock' : null;
+    if (!missing) return null;
+    var tip = h('div', { class: 'unlock-tip' },
+      h('span', { class: 'grow' }, !unlockInfo.code ? '🛟 Make a recovery code, so you never lose your notes if you forget your password.' : '🔐 Unlock with Face ID or your fingerprint instead of typing.'),
+      h('button', { class: 'btn small', type: 'button', onclick: function () { unlockOptionsDialog(ctx); } }, 'Set up'),
+      h('button', { class: 'btn plain small', type: 'button', 'aria-label': 'Hide', onclick: function () { unlockTipHidden = true; tip.remove(); } }, '✕'));
+    return tip;
   }
 
   var openSubjects = new Set();
@@ -985,6 +1275,7 @@
       subjectList,
       h('button', { class: 'btn soft small', type: 'button', style: 'margin:8px', onclick: addSubject }, '＋ New subject'),
       h('button', { class: 'btn plain small', type: 'button', onclick: function () { forgetNotesKey(); viewNotebook(ctx); } }, '🔒 Lock notebook'),
+      h('button', { class: 'btn plain small', type: 'button', onclick: function () { unlockOptionsDialog(ctx); } }, '🔐 Unlock options'),
       nb.unreadable ? h('p', { class: 'note-line', style: 'padding:8px' }, nb.unreadable + ' item(s) couldn’t be unlocked with this key.') : null);
 
     drawSubjects();
@@ -1268,7 +1559,7 @@
         h('div', { class: 'dh' }, h('span', null, (n ? 'Edit note' : 'New note') + ' · ' + topic.title), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
         h('div', { class: 'db', style: 'white-space:normal' }, area, err,
           h('div', { class: 'nb-actions' }, delBtn, h('span', { class: 'grow' }), save),
-          h('p', { class: 'note-line' }, 'Locked with your notes password before it leaves this browser. It appears on your phone at its next sync.')));
+          h('p', { class: 'note-line' }, 'Locked before it leaves this browser, so only you can read it. It appears on your phone at its next sync.')));
       d.addEventListener('close', function () { d.remove(); });
       document.body.appendChild(d); d.showModal(); area.focus();
     }
