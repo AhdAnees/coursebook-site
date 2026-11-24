@@ -281,10 +281,11 @@
 
   async function viewCourses() {
     show(topBar(), h('main', { class: 'page' }, h('p', { class: 'note-line' }, 'Loading your courses…')));
-    var courses, requests = [];
+    var courses, requests = [], canCreate = false;
     try {
       courses = await myCourses();
       var jr = await sb.rpc('my_join_requests'); if (!jr.error) requests = (jr.data || []).filter(function (q) { return q.status === 'pending'; });
+      var cc = await sb.rpc('can_create_courses'); canCreate = !cc.error && cc.data === true;
     } catch (x) { return show(topBar(), h('main', { class: 'page' }, h('p', { class: 'error' }, x.message))); }
 
     var code = h('input', { type: 'text', placeholder: 'Invite code', autocomplete: 'off', maxlength: '8', 'aria-label': 'Invite code', value: state.pendingCode || '' });
@@ -330,7 +331,37 @@
       courses.length ? courseGrid : null,
       courses.length ? null : h('div', { class: 'card empty' }, h('p', null, 'You’re not in any course yet. Join one with the invite code from your trainer.')),
       requests.length ? h('p', { class: 'note-line' }, 'Waiting for approval: ', requests.map(function (q) { return q.title; }).join(', ')) : null,
-      h('div', { class: 'card', style: 'margin-top:20px' }, h('h2', null, 'Join a course'), join, err)));
+      h('div', { class: 'card', style: 'margin-top:20px' }, h('h2', null, 'Join a course'), join, err),
+      canCreate
+        ? h('div', { class: 'card', style: 'margin-top:20px' }, h('h2', null, 'Run a course'), h('p', { class: 'sub', style: 'margin-bottom:14px' }, 'Create a course, then share its invite link with your class.'),
+            h('button', { class: 'btn', type: 'button', onclick: createCourseForm }, '＋ Create a course'))
+        : h('p', { class: 'note-line', style: 'margin-top:20px' }, 'Want to run a course? Write to ', h('a', { href: 'mailto:support@liyaanote.app?subject=Start%20a%20course%20on%20Liyaa%20Note' }, 'support@liyaanote.app'), ' and we’ll switch on course creation for your account.')));
+  }
+
+  var ACCENTS = ['#4F6DF5', '#7C5CFA', '#E5484D', '#F2994A', '#30A46C', '#12A4B6', '#D6409F', '#64748B'];
+  function isoDay(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
+  function createCourseForm() {
+    var start = new Date(), end = new Date(); end.setDate(end.getDate() + 7);
+    formDialog({
+      title: 'Create a course', submit: 'Create course',
+      fields: [
+        { key: 'type', label: 'Kind', options: [['course', 'Course'], ['workshop', 'Workshop'], ['session', 'Session'], ['program', 'Program']] },
+        { key: 'title', label: 'Title', placeholder: 'e.g. Inspector Course 8', required: true, max: '120' },
+        { key: 'location', label: 'Location', placeholder: 'City, venue or Online', max: '120' },
+        { key: 'start', label: 'Start date', type: 'date', value: isoDay(start), required: true },
+        { key: 'end', label: 'End date', type: 'date', value: isoDay(end), required: true },
+        { key: 'details', label: 'Details (optional)', placeholder: 'What is it about, schedule, what to bring…', multiline: true, max: '2000' },
+      ],
+      onSubmit: async function (v) {
+        if (v.end < v.start) throw new Error('The end date must be on or after the start date.');
+        var r = await sb.rpc('create_course', { p_type: v.type, p_title: v.title, p_location: v.location, p_start_date: v.start, p_end_date: v.end, p_details: v.details, p_color: ACCENTS[Math.floor(Math.random() * ACCENTS.length)], p_sample: false });
+        fail(r.error);
+        courseCache = { id: null, ctx: null };
+        toast('Course created. Share its invite link from “Invite & members”.');
+        location.hash = '#/c/' + r.data.id + '/notebook';
+      },
+    });
   }
 
   // ---------- A course: header and tabs ----------
@@ -340,19 +371,79 @@
     if (!c.data) throw new Error('This course isn’t available. You may not be a member.');
     var m = await sb.from('course_members').select('user_id, display_name, role').eq('course_id', id); fail(m.error);
     var names = new Map((m.data || []).map(function (x) { return [x.user_id, x.display_name || 'Member']; }));
-    return { course: c.data, names: names };
+    var isOwner = (m.data || []).some(function (x) { return x.user_id === state.user.id && x.role === 'owner'; });
+    return { course: c.data, names: names, isOwner: isOwner };
   }
 
   function courseFrame(ctx, tab, body) {
     var c = ctx.course;
     return [topBar('#/'),
-      h('div', { class: 'course-head' }, h('h1', null, c.title),
+      h('div', { class: 'course-head' }, ctx.isOwner ? h('button', { class: 'btn soft small owner-btn', type: 'button', onclick: function () { ownerPanel(ctx); } }, 'Invite & members') : null, h('h1', null, c.title),
         h('p', null, [c.location, fmtDate(c.start_date) + (c.end_date ? ' – ' + fmtDate(c.end_date) : ''), ctx.names.size + ' members'].filter(Boolean).join(' · '))),
       h('nav', { class: 'tabs', 'aria-label': 'Course' },
         h('a', { href: '#/c/' + c.id + '/notebook', 'aria-current': tab === 'notebook' ? 'page' : null }, 'Notebook'),
         h('a', { href: '#/c/' + c.id + '/library', 'aria-current': tab === 'library' ? 'page' : null }, 'Library'),
         h('a', { href: '#/c/' + c.id + '/chat', 'aria-current': tab === 'chat' ? 'page' : null }, 'Chat')),
       h('div', { class: 'tab-body' }, body)];
+  }
+
+  // ---------- Owner: invite link, approvals, join requests ----------
+
+  function inviteLink(c) { return 'https://liyaanote.app/join.html?code=' + encodeURIComponent(c.invite_code) + '&course=' + encodeURIComponent(c.title); }
+
+  async function ownerPanel(ctx) {
+    var c = ctx.course, link = inviteLink(c);
+    var reqBox = h('div', null, h('p', { class: 'note-line' }, 'Loading join requests…'));
+    var approve = h('input', { type: 'checkbox' }); approve.checked = !!c.require_approval;
+    approve.addEventListener('change', async function () {
+      var r = await sb.from('courses').update({ require_approval: approve.checked }).eq('id', c.id);
+      if (r.error) { approve.checked = !approve.checked; return toast(friendly(r.error.message)); }
+      c.require_approval = approve.checked; toast(approve.checked ? 'New members now wait for your approval.' : 'People with the code now join straight away.');
+    });
+    var copyBtn = h('button', { class: 'btn small', type: 'button', onclick: async function () {
+      try { await navigator.clipboard.writeText(link); copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy link'; }, 1600); }
+      catch (e) { prompt('Copy this invite link:', link); }
+    } }, 'Copy link');
+    var shareBtn = navigator.share ? h('button', { class: 'btn soft small', type: 'button', onclick: function () {
+      navigator.share({ title: 'Join ' + c.title + ' on Liyaa Note', text: 'Join ' + c.title + ' on Liyaa Note. Your invite code is ' + c.invite_code + '.', url: link }).catch(function () {});
+    } }, 'Share…') : null;
+    var d = h('dialog', { 'aria-label': 'Invite and members' },
+      h('div', { class: 'dh' }, h('span', null, 'Invite & members'), h('button', { class: 'btn plain small', type: 'button', onclick: function () { d.close(); } }, 'Close')),
+      h('div', { class: 'db', style: 'white-space:normal' },
+        h('h2', null, 'Invite your class'),
+        h('p', { class: 'note-line', style: 'margin-top:0' }, 'Send this link on WhatsApp or by email. It walks each person through installing the app (or using it in the browser) and joining.'),
+        h('div', { class: 'invite-code', 'aria-label': 'Invite code' }, c.invite_code),
+        h('div', { class: 'nb-actions', style: 'margin:0 0 6px' }, copyBtn, shareBtn),
+        h('p', { class: 'note-line', style: 'overflow-wrap:anywhere' }, link),
+        h('label', { class: 'check', style: 'margin-top:14px' }, approve, h('span', null, h('b', null, 'Approve new members'), ' — people with the link wait until you let them in.')),
+        h('h2', { style: 'margin-top:18px' }, 'Join requests'), reqBox,
+        h('p', { class: 'note-line' }, ctx.names.size + ' member(s). Remove members or end the course in the phone app.')));
+    d.addEventListener('close', function () { d.remove(); if (d.dataset.changed) { courseCache = { id: null, ctx: null }; route(); } });
+    document.body.appendChild(d); d.showModal();
+
+    async function drawRequests() {
+      var r = await sb.rpc('course_join_requests', { p_course_id: c.id });
+      if (r.error) return reqBox.replaceChildren(h('p', { class: 'error' }, friendly(r.error.message)));
+      var list = r.data || [];
+      if (!list.length) return reqBox.replaceChildren(h('p', { class: 'note-line' }, 'No one is waiting.'));
+      reqBox.replaceChildren.apply(reqBox, list.map(function (q) {
+        var row = h('div', { class: 'req' },
+          h('span', { class: 'av' }, initials(q.display_name)),
+          h('div', { class: 'grow' }, h('b', null, q.display_name || 'Member'),
+            h('span', { class: 'm' }, [q.full_name && q.full_name !== q.display_name ? q.full_name : '', q.email, q.phone].filter(Boolean).join(' · ')),
+            h('span', { class: 'm' }, 'Asked ' + fmtDate(q.requested_at))),
+          h('button', { class: 'btn small', type: 'button', onclick: function () { answer(true); } }, 'Approve'),
+          h('button', { class: 'btn plain small', type: 'button', onclick: function () { answer(false); } }, 'Decline'));
+        async function answer(yes) {
+          row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+          var a = await sb.rpc('answer_join_request', { p_course_id: c.id, p_user_id: q.user_id, p_approve: yes });
+          if (a.error) { toast(friendly(a.error.message)); row.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); return; }
+          d.dataset.changed = '1'; toast(yes ? (q.display_name || 'They') + ' can now open the course.' : 'Request declined.'); drawRequests();
+        }
+        return row;
+      }));
+    }
+    drawRequests();
   }
 
   // ---------- Library ----------
@@ -717,8 +808,8 @@
     } },
       o.intro ? h('p', { class: 'note-line', style: 'margin-top:0' }, o.intro) : null,
       o.fields.map(function (f) {
-        var el = f.multiline ? h('textarea', { rows: '3', maxlength: f.max || '1000' }) : h('input', { type: f.type === 'url' ? 'text' : f.type || 'text', inputmode: f.type === 'url' ? 'url' : null, autocapitalize: f.type === 'url' ? 'off' : null, spellcheck: f.type === 'url' ? 'false' : null, maxlength: f.max || '200' });
-        el.value = f.value || ''; if (f.placeholder) el.placeholder = f.placeholder;
+        var el = f.options ? h('select', null, f.options.map(function (o) { return h('option', { value: o[0] }, o[1]); })) : f.multiline ? h('textarea', { rows: '3', maxlength: f.max || '1000' }) : h('input', { type: f.type === 'url' ? 'text' : f.type || 'text', inputmode: f.type === 'url' ? 'url' : null, autocapitalize: f.type === 'url' ? 'off' : null, spellcheck: f.type === 'url' ? 'false' : null, maxlength: f.max || '200' });
+        if (!f.options || f.value) el.value = f.value || ''; if (f.placeholder) el.placeholder = f.placeholder;
         inputs[f.key] = el;
         return h('label', { class: 'field' }, h('span', null, f.label), el, f.hint ? h('small', { class: 'note-line' }, f.hint) : null);
       }),
